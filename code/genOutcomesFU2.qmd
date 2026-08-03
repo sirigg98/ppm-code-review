@@ -1,0 +1,1626 @@
+---
+title: "Outcomes - FU2"
+author: "Sirig Gurung"
+date: today
+fontsize: 10pt
+mainfont: Fira Sans
+fontfamily: Fira Sans
+monofont: Fira Code
+code-line-numbers: true
+df-print: kable
+highlight-style: tango
+number-sections: true
+toc: false
+lot: false
+echo: true
+warning: false
+header-includes:
+  - \usepackage{float}
+  - \floatplacement{table}{H}
+  - \floatplacement{figure}{H}
+format: 
+  pdf:
+    fig-pos: 'H'
+    tbl-pos: 'H'
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+#| echo: false
+#| results: hide
+
+rm(list = ls())
+
+pkgs <- c("tidyverse", "modelsummary", "here")
+
+sapply(pkgs, require, character.only = TRUE)
+rm(pkgs)
+
+options(knitr.kable.NA = 0)
+options(modelsummary_format_numeric_latex = "plain")
+```
+
+```{r}
+#| label: Loading-deID-Data-DB
+#| echo: false
+# PM ----
+pm_fu2 <- read.csv(here("data/out/fu2/Follow-up Round 2 Prospective Migrant De-ID.csv")) |>
+  distinct(hh_id, .keep_all = T)
+# SHM ----
+shm_fu2 <- read.csv(here("data/out/fu2/Follow-up Round 2 Secondary HH Member De-ID.csv")) |>
+  distinct(hh_id, .keep_all = T)
+# HoH ----
+hoh_fu2 <- read.csv(here("data/out/fu2/Follow-up Round 2 Household Head De-ID.csv")) |>
+  distinct(hh_id, .keep_all = T)
+
+bl_workfile <- read.csv(here("data/out/bl/workfile-final.csv"))
+pm_workfile_fu2 <- read.csv(here("data/out/fu2/workfile_fu2_analysis.csv"))
+# Treatment DF ----
+treat_df <-  bl_workfile |>
+  select(hh_id, S, Z)
+```
+
+```{r}
+#| label: Create-Outcomes-Dataset
+
+workfile <- bl_workfile |>
+  mutate(S_Z = str_to_upper(str_c(S, "-", Z)),
+         fu2_pm_comp = 1*(hh_id %in% pm_fu2$hh_id),
+         fu2_shm_comp = 1*(hh_id %in% shm_fu2$hh_id),
+         fu2_hoh_comp = 1*(hh_id %in% hoh_fu2$hh_id)) |>
+  select(hh_id, loc_id, com_id, S, Z, S_Z, ipw_s, ipw_z, 
+         fu2_pm_comp, fu2_shm_comp, fu2_hoh_comp,
+         matches("^bl_")) |>
+  arrange(hh_id)
+
+workfile$S_Z <- factor(workfile$S_Z, 
+                       levels = c("MC-PPM", "MC-UCT", "MC-C", "PC-C"))
+```
+
+# Functions to generate outcomes
+
+## Additive indices
+
+```{r}
+#| label: Define-Additive-Index-Function
+addIndex <- function(df_name, x, outcome_name, na = T) {
+  # df_name: Dataset (string)
+  # x: vector of variable names to sum over (string)
+  # outcome_name: Name of outcome being generated  (string)
+  # na: Include NAs or not? Feeds into the na.rm argument (boolean)
+  df <- get(df_name) |>
+    rowwise() |>
+    mutate(!!outcome_name := 
+             sum(c_across(all_of(x)), na.rm = T)) |>
+    ungroup()
+  assign(df_name, df, envir = .GlobalEnv)
+}
+```
+
+## Summarize outcomes
+
+```{r}
+#| label: Summarize-Outcomes
+
+summ <- function(x) {
+  sub <- workfile |>
+  select(S_Z, all_of(x))
+
+datasummary(All(sub) ~ 
+              S_Z * (N + Mean), 
+            data = sub,
+            output = "kableExtra") |> 
+  kableExtra::kable_styling(font_size = 8)
+}
+```
+
+## Check levels of variable 
+
+```{r}
+#| label: check-levels-of-var
+checkLevels <- function(df, x) {
+  df |>
+    group_by(get(x)) |>
+    summarize(n())
+}
+```
+
+## Get Varnames from regex 
+
+```{r}
+#| label: get-varnames
+
+getVarnames <- function(df, x) {
+  colnames(select(df, matches(x)))
+}
+
+```
+
+# Generate outcomes
+
+## Primary Outcomes
+
+### PM
+
+#### Manipulation Checks
+
+```{r}
+#| label: Gen-ManiCheck-Outcomes-PM
+
+# Cleaning outcome components ----
+pm_fu2 <- pm_fu2 |>
+  mutate_at(vars(pm_vax),
+            ~case_when(. < 0 ~ NA,
+                       .default = .))
+
+# Possession of travel documents (0-2) ----
+addIndex("pm_fu2",
+         c("pm_id",
+           "pm_vax"),
+         "fu2_pm_has_travel_docs")
+```
+
+```{r}
+#| label: Summ-ManiCheck-Outcomes-PM
+#| echo: False
+# Merge in outcomes to workfile ----
+workfile <- workfile |>
+  left_join(select(pm_fu2, hh_id,
+                   fu2_pm_has_travel_docs,
+                   c("pm_id",
+                     "pm_vax")), 
+            by = "hh_id") |>
+  rename_at(vars(c("pm_id",
+                     "pm_vax")), 
+            ~paste0("fu2_", .))
+
+# Summarize outcomes generated ----
+summ(c("fu2_pm_has_travel_docs"))
+
+```
+
+
+#### Migration
+
+```{r}
+#| label: Gen-Mig-Outcomes-PM
+
+# Cleaning outcome components ----
+pm_fu2 <- pm_fu2 |>
+  mutate_at(vars(pm_mig_prep_contact, 
+                 pm_mig_prep_savings, 
+                 pm_mig_prep_legal),
+            ~case_when(. < 0 ~ NA,
+                       .default = .))
+
+# Intention to Migrate (0-1) ----
+pm_fu2 <- pm_fu2 |>
+  mutate(fu2_pm_mig_intent = 1*(pm_mig_intent == 1 | pm_mig_intent_1 == 1))
+
+# Preparation to migrate (0-3) ----
+addIndex("pm_fu2",
+         c("pm_mig_prep_contact", 
+           "pm_mig_prep_savings", 
+           "pm_mig_prep_legal"),
+         "fu2_pm_mig_prep")
+
+# Any, Domestic, Intl, ECOWAS migration from FU2 ----
+non_ec_mig <- pm_fu2 |>
+  mutate(fu2_pm_border_cross_ecowas_num = str_count(pm_countries,
+                                                    "\\b(?:3|6|7|9|10|13|14|15|16|17|18|19)\\b"),
+         fu2_pm_border_cross_nonec_num = str_count(pm_countries, 
+                                                   "\\b(?:2|4|5|8|11|12|20|21)\\b"),
+         dum_ec = 1*(fu2_pm_border_cross_ecowas_num > 0),
+         fu2_pm_border_cross_nonec = 1*(fu2_pm_border_cross_nonec_num)) |>
+  select(hh_id, fu2_pm_border_cross_nonec)
+
+
+temp_df <- pm_workfile_fu2 |>
+  select(hh_id, 
+         fu2_pm_mig_any = fu2_mig_at_all,
+         fu2_pm_dom_mig = fu2_dom_mig,
+         fu2_pm_border_cross = fu2_border_cross,
+         fu2_pm_border_cross_ecowas = fu2_border_cross_ecowas) |>
+  left_join(non_ec_mig, by = "hh_id")
+
+
+
+# Counts and weeks from FU2 ----
+ecowas_codes <- c(3, 6, 7, 9, 10, 13, 14, 15, 16, 17, 18, 19)
+noecowas_codes <- c(setdiff(c(2:21), ecowas_codes), -777)
+
+return_country <- function(index, text) {
+  items <- str_split(text, ",")[[1]]
+  if (index > 0 & index <= length(items)) {
+    return(items[index])
+  } else {
+    return(NA)
+  }
+}
+
+mig_df <- pm_fu2 |>
+  select(hh_id, pm_locations_list, pm_countries,
+         matches("pm_location_is_home_[0-9]|pm_location_act_index_[0-9]|pm_location_weeks_[0-9]")) |>
+  pivot_longer(
+    cols = matches("pm_location_is_home_[0-9]|pm_location_act_index_[0-9]|pm_location_weeks_[0-9]"),
+    names_to = c(".value", "loc_ind"),
+    names_pattern = "(.+)_([0-9]+)")|>
+  filter(!is.na(pm_location_act_index))
+
+tot_loc_weeks <- mig_df |>
+  group_by(hh_id) |>
+  summarize(fu2_pm_total_weeks = sum(pm_location_weeks, na.rm = T))
+
+mig_df$country <- map(1:nrow(mig_df),
+    function(x){
+      index <- mig_df$pm_location_act_index[x]
+      country_list <- mig_df$pm_countries[x]
+      as.numeric(return_country(index, country_list))
+    }) |>
+  unlist()
+
+mig_df <- mig_df |>
+  filter(pm_location_is_home == 0) |>
+  mutate(country = ifelse(is.na(country), 1, country),
+         dum = 1,
+         ecowas = 1*(country %in% ecowas_codes),
+         nonecowas = 1*(country %in% noecowas_codes),
+         dom = 1*(country == 1),
+         ecowas_weeks = ifelse(ecowas == 1, pm_location_weeks, 0),
+         nonecowas_weeks = ifelse(nonecowas == 1, pm_location_weeks, 0),
+         dom_weeks = ifelse(dom == 1, pm_location_weeks, 0)) |>
+  group_by(hh_id) |>
+  summarize(fu2_pm_mig_any_num = sum(dum, na.rm = T),
+            fu2_pm_mig_any_weeks = sum(pm_location_weeks, na.rm = T),
+            fu2_pm_dom_mig_num = sum(dom, na.rm = T),
+            fu2_pm_dom_mig_weeks = sum(dom_weeks, na.rm = T),
+            fu2_pm_border_cross_ecowas_num = sum(ecowas, na.rm = T),
+            fu2_pm_border_cross_ecowas_weeks = sum(ecowas_weeks, na.rm = T),
+            fu2_pm_border_cross_nonec_num = sum(nonecowas, na.rm = T),
+            fu2_pm_border_cross_nonec_weeks = sum(nonecowas_weeks, na.rm = T))
+  
+mig_df <- mig_df |>
+  right_join(select(pm_fu2, hh_id), by = "hh_id") |>
+  mutate_at(vars(fu2_pm_mig_any_num, 
+                 fu2_pm_dom_mig_num,
+                 fu2_pm_border_cross_ecowas_num,
+                 fu2_pm_border_cross_nonec_num,
+                 fu2_pm_mig_any_weeks,
+                 fu2_pm_dom_mig_weeks,
+                 fu2_pm_border_cross_ecowas_weeks,
+                 fu2_pm_border_cross_nonec_weeks),
+            ~ifelse(is.na(.), 0, .))|>
+  left_join(tot_loc_weeks, by = "hh_id")
+
+
+```
+
+
+```{r}
+#| label: Summ-Mig-Outcomes-PM
+#| echo: False
+# Merge in outcomes to workfile ----
+workfile <- workfile |>
+  left_join(select(pm_fu2, hh_id,
+                   fu2_pm_mig_prep,
+                   fu2_pm_mig_intent,
+         c("pm_mig_prep_contact", 
+           "pm_mig_prep_savings", 
+           "pm_mig_prep_legal")), 
+            by = "hh_id") |>
+  left_join(select(temp_df, hh_id,
+                   fu2_pm_mig_any,
+                   fu2_pm_dom_mig,
+                   fu2_pm_border_cross,
+                   fu2_pm_border_cross_ecowas,
+                   fu2_pm_border_cross_nonec),
+            by = "hh_id") |>
+  left_join(mig_df, by = "hh_id") |>
+  rename_at(vars(c("pm_mig_prep_contact", 
+                   "pm_mig_prep_savings", 
+                   "pm_mig_prep_legal")),
+            ~paste0("fu2_", .))
+
+# Summarize outcomes generated ----
+summ(c("fu2_pm_mig_intent", 
+       "fu2_pm_mig_prep",
+       "fu2_pm_mig_any",
+       "fu2_pm_dom_mig",
+       "fu2_pm_border_cross",
+       "fu2_pm_border_cross_ecowas",
+       "fu2_pm_border_cross_nonec",
+       "fu2_pm_mig_any_num", 
+       "fu2_pm_dom_mig_num",
+       "fu2_pm_border_cross_ecowas_num",
+       "fu2_pm_border_cross_nonec_num",
+       "fu2_pm_mig_any_weeks",
+       "fu2_pm_dom_mig_weeks",
+       "fu2_pm_border_cross_ecowas_weeks",
+       "fu2_pm_border_cross_nonec_weeks",
+       "fu2_pm_total_weeks"))
+
+rm(temp_df)
+```
+
+
+#### Migrated or intend to migrate
+
+```{r}
+#| label: Gen-Intent-Mig-Outcomes-PM
+
+# Any, Domestic, Intl, ECOWAS migration from FU2 ----
+temp_df <- pm_workfile_fu2 |>
+  filter(!is.na(pm_home)) |>
+  select(hh_id, 
+         fu2_pm_mig_any = fu2_mig_at_all,
+         fu2_pm_dom_mig = fu2_dom_mig,
+         fu2_pm_border_cross = fu2_border_cross,
+         fu2_pm_border_cross_ecowas = fu2_border_cross_ecowas) |>
+  right_join(select(pm_fu2, hh_id, fu2_pm_mig_intent, pm_mig_intent, pm_mig_intent_1,
+                   pm_mig_intent_country, pm_home), by = "hh_id") |>
+  mutate(pm_intent_any = fu2_pm_mig_intent,
+         pm_intent_dom = case_when(is.na(pm_mig_intent_country) ~ 0,
+                                   .default = 1*(pm_mig_intent_country == 1)),
+         pm_intent_intl = case_when(is.na(pm_mig_intent_country) ~ 0,
+                                   .default = 1*(pm_mig_intent_country %in% 2:30)),
+         pm_intent_ec = case_when(is.na(pm_mig_intent_country) ~ 0,
+                                   .default = 1*(pm_mig_intent_country %in%
+                                                   c(3, 6, 7, 9, 10, 13, 14, 
+                                                     15, 16, 17, 18, 19)))) |>
+  mutate(fu2_pm_intent_mig_any = case_when(is.na(pm_intent_any) & 
+                                             is.na(fu2_pm_mig_any) ~ NA,
+                                .default = pmax(pm_intent_any, 
+                                                fu2_pm_mig_any, 
+                                                na.rm = T)),
+         fu2_pm_intent_dom_mig = case_when(is.na(pm_intent_dom) & 
+                                             is.na(fu2_pm_dom_mig) ~ NA,
+                                .default = pmax(pm_intent_dom, 
+                                                fu2_pm_dom_mig, 
+                                                na.rm = T)),
+         fu2_pm_intent_border_cross = case_when(is.na(pm_intent_intl) & 
+                                           is.na(fu2_pm_border_cross) ~ NA,
+                                .default = pmax(pm_intent_intl, 
+                                                fu2_pm_border_cross, 
+                                                na.rm = T)),
+         fu2_pm_intent_border_cross_ecowas = case_when(is.na(pm_intent_ec) &
+                                                  is.na(fu2_pm_border_cross_ecowas) ~ NA,
+                                .default = pmax(pm_intent_ec, 
+                                                fu2_pm_border_cross_ecowas, 
+                                                na.rm = T)))  |>
+  select(hh_id, fu2_pm_intent_mig_any, fu2_pm_intent_border_cross,
+         fu2_pm_intent_border_cross_ecowas, fu2_pm_intent_dom_mig)
+```
+
+
+```{r}
+#| label: Summ-Intent-Mig-Outcomes-PM
+#| echo: False
+# Merge in outcomes to workfile ----
+workfile <- workfile |>
+  left_join(temp_df, by = "hh_id")
+
+# Summarize outcomes generated ----
+summ(c("fu2_pm_intent_mig_any", 
+       "fu2_pm_intent_border_cross",
+       "fu2_pm_intent_border_cross_ecowas", 
+       "fu2_pm_intent_dom_mig"))
+
+rm(temp_df)
+```
+
+
+
+#### Economic Well-Being
+
+```{r}
+#| label: Gen-Econ-Outcomes-PM
+
+# Cleaning outcome components ----
+pm_fu2 <- pm_fu2 |>
+  mutate(pm_total_loan_value = -pm_total_loan_value) |>
+  mutate(pm_eat_protein = 7 - pm_eat_protein,
+         pm_skip_meals_num = case_when(pm_skip_meals == 0 ~ 0,
+                                       .default = pm_skip_meals_num),
+         pm_emergency = 1*(pm_emerg_sell == 1 | pm_emerg_borrow == 1 | pm_emerg_spend == 1),
+         pm_emergency_capital = (5-pm_emergency_capital)/4) |>
+  rowwise() |>
+  mutate(fu2_pm_food_cost = sum(pm_food_cost_1,
+                             pm_food_cost_2,
+                             pm_food_cost_3,
+                             pm_food_cost_4,
+                             na.rm = T),
+         fu2_pm_housing_cost = sum(pm_housing_cost_1,
+                             pm_housing_cost_2,
+                             pm_housing_cost_3,
+                             pm_housing_cost_4,
+                             na.rm = T),
+         fu2_pm_transportation_cost = sum(pm_transportation_cost_1,
+                             pm_transportation_cost_2,
+                             pm_transportation_cost_3,
+                             pm_transportation_cost_4,
+                             na.rm = T),
+         fu2_pm_leisure_cost = sum(pm_leisure_cost_1,
+                             pm_leisure_cost_2,
+                             pm_leisure_cost_3,
+                             pm_leisure_cost_4,
+                             na.rm = T),
+         fu2_pm_phone_cost = sum(pm_phone_cost_1,
+                             pm_phone_cost_2,
+                             pm_phone_cost_3,
+                             pm_phone_cost_4,
+                             na.rm = T))
+
+
+# Income (CFA) ----
+addIndex("pm_fu2",
+         c(getVarnames(pm_fu2, "pm_calc_total_income_"),
+           getVarnames(pm_fu2, "pm_calc_other_income_")),
+         "fu2_pm_inc")
+
+pm_fu2 <- pm_fu2 |>
+  rowwise() |>
+  mutate(pm_location_weeks = sum(pm_location_weeks_1,
+                                 pm_location_weeks_2,
+                                 pm_location_weeks_3,
+                                 pm_location_weeks_4,
+                                 na.rm = T)) |>
+  ungroup() |>
+  mutate(fu2_pm_inc = fu2_pm_inc/pm_location_weeks)
+
+# Savings (CFA) ----
+pm_fu2 <- pm_fu2 |>
+  rowwise() |>
+  mutate(fu2_pm_savings = sum(pm_savings_type_amt_1,
+                                 pm_savings_type_amt_2,
+                                 pm_savings_type_amt_3,
+                                 na.rm = T)) |>
+  ungroup() |>
+  mutate(fu2_pm_savings = ifelse(pm_separate_savings == 0, 0, fu2_pm_savings),
+         fu2_pm_total_loan_value = -pm_total_loan_value)
+
+
+addIndex("pm_fu2",
+         c(getVarnames(pm_fu2, "pm_savings_type_amt"),
+           "pm_total_loan_value"),
+         "fu2_pm_net_savings")
+
+# Consumption ----
+addIndex("pm_fu2",
+         c(getVarnames(pm_fu2, "pm_food_cost_"),
+           getVarnames(pm_fu2, "pm_housing_cost_"),
+           getVarnames(pm_fu2, "pm_leisure_cost_"),
+           getVarnames(pm_fu2, "pm_phone_cost_"),
+           getVarnames(pm_fu2, "pm_transportation_cost_")),
+         "fu2_pm_cons")
+
+pm_fu2 <- pm_fu2 |>
+  mutate(num_locations = str_count(pm_locations_list, ",") + 1,
+         fu2_pm_cons = fu2_pm_cons/num_locations)
+
+
+# Food Insecurity (0-14)----
+addIndex("pm_fu2",
+         c("pm_skip_meals_num",
+           "pm_eat_protein"),
+         "fu2_pm_foodsec")
+
+## Reversing so it is food security
+pm_fu2 <- pm_fu2 |>
+  mutate(fu2_pm_foodsec = 14 - fu2_pm_foodsec)
+
+# Economic Precarity ----
+## pm_emergency is a select multiple. Converting to indicator
+## for PM faced emergency
+addIndex("pm_fu2",
+         c("pm_emergency_capital",
+           "pm_emergency"),
+         "fu2_pm_econprecar")
+
+
+
+# Income shared 
+temp_loc_share_df <- pm_fu2 |> 
+  select(hh_id, matches("pm_location_is_home_[0-9]|pm_share_income_[0-9]+|pm_share_income_amt_[0-9]+|pm_rec_income_[0-9]+|pm_rec_income_amt_[0-9]+|pm_location_weeks_[0-9]|pm_location_period_lab_[0-9]")) |>
+  pivot_longer(
+    cols = matches("pm_location_is_home_[0-9]|pm_share_income_[0-9]+|pm_share_income_amt_[0-9]+|pm_rec_income_[0-9]+|pm_rec_income_amt_[0-9]+|pm_location_period_lab_[0-9]+|pm_location_weeks_[0-9]+"),
+    names_to = c(".value", "loc_ind"),
+    names_pattern = "(.+)_([0-9]+)") |>
+  group_by(hh_id) |>
+  summarize(fu2_pm_share_income = mean(pm_share_income_amt, na.rm = T),
+            fu2_pm_rec_income = mean(pm_rec_income_amt, na.rm = T),
+            tot_loc_weeks = sum(pm_location_weeks, na.rm = T)) |>
+  mutate(fu2_pm_share_income = ifelse(is.na(fu2_pm_share_income), 0,
+                                      fu2_pm_share_income/tot_loc_weeks),
+         fu2_pm_rec_income = ifelse(is.na(fu2_pm_rec_income), 0, 
+                                    fu2_pm_rec_income/tot_loc_weeks))
+
+
+pm_fu2 <- left_join(pm_fu2, temp_loc_share_df, by = "hh_id")
+
+```
+
+```{r}
+#| label: Summ-Econ-Outcomes-PM
+#| echo: False
+# Merge in outcomes to workfile ----
+workfile <- workfile |>
+  left_join(select(pm_fu2, hh_id,
+                   fu2_pm_inc,
+                   fu2_pm_net_savings,
+                   fu2_pm_savings,
+                   fu2_pm_total_loan_value,
+                   fu2_pm_cons,
+                   fu2_pm_foodsec,
+                   fu2_pm_econprecar,
+                   fu2_pm_phone_cost, 
+                   fu2_pm_leisure_cost,
+                   fu2_pm_transportation_cost,
+                   fu2_pm_food_cost,
+                   fu2_pm_housing_cost,
+                   fu2_pm_share_income,
+                   fu2_pm_rec_income), 
+            by = "hh_id")
+
+# Summarize outcomes generated ----
+summ(c("fu2_pm_inc",
+       "fu2_pm_net_savings",
+       "fu2_pm_savings",
+       "fu2_pm_total_loan_value",
+       "fu2_pm_cons",
+       "fu2_pm_foodsec",
+       "fu2_pm_econprecar",
+       "fu2_pm_share_income",
+       "fu2_pm_rec_income"))
+
+```
+
+
+#### Physical Health and Saftey
+
+```{r}
+#| label: Gen-HealthSafety-Outcomes-PM
+
+# Absence of harassment and violence (0-8) ----
+## All components are at the location level, taking max
+## Could take sum but PMs travel to diff num. locations
+pm_fu2 <- pm_fu2 |>
+  rowwise() |>
+  mutate(pm_felt_unsafe = max(pm_felt_unsafe_1,
+                              pm_felt_unsafe_2,
+                              pm_felt_unsafe_3,
+                              pm_felt_unsafe_4, na.rm = T),
+         pm_phys_attacked = max(pm_phys_attacked_1,
+                              pm_phys_attacked_2,
+                              pm_phys_attacked_3,
+                              pm_phys_attacked_4, na.rm = T),
+         pm_theft = max(pm_theft_1,
+                              pm_theft_2,
+                              pm_theft_3,
+                              pm_theft_4, na.rm = T),
+         pm_disc = max(pm_disc_1,
+                              pm_disc_2,
+                              pm_disc_3,
+                              pm_disc_4, na.rm = T)) |>
+  ungroup()
+  
+addIndex("pm_fu2",
+         c("pm_felt_unsafe",
+           "pm_phys_attacked", 
+           "pm_theft", "pm_disc"),
+         "fu2_pm_harrasment")  
+  
+
+# Physical health (1-4) ----
+## pm_illness component is at the location level. Taking max
+
+temp_df <- pm_fu2 |> 
+  select(hh_id, matches("pm_illness_[0-9]+")) |>
+  pivot_longer(
+    cols = matches("pm_illness_[0-9]+"),
+    names_to = c(".value", "loc_ind"),
+    names_pattern = "(.+)_([0-9]+)") |>
+  filter(!is.na(pm_illness)) |>
+  group_by(hh_id) |>
+  summarize(pm_illness = max(pm_illness))
+
+pm_fu2 <- pm_fu2 |>
+  left_join(temp_df, by = "hh_id") |>
+  # Scaling all components to (0-1)
+  mutate(pm_sleep = pm_sleep/24,
+         pm_physical_health = (pm_physical_health - 1)/4)
+
+addIndex("pm_fu2",
+         c("pm_illness_limit",
+           "pm_sleep", 
+           "pm_illness",
+           "pm_physical_health"),
+         "fu2_pm_physical_health")
+
+```
+
+```{r}
+#| label: Summ-HealthSafety-Outcomes-PM
+#| echo: False
+# Merge in outcomes to workfile ----
+workfile <- workfile |>
+  left_join(select(pm_fu2, hh_id,
+                   fu2_pm_physical_health,
+                   fu2_pm_harrasment,
+                   c("pm_illness_limit",
+                     "pm_sleep", 
+                     "pm_illness",
+                     "pm_physical_health1" = "pm_physical_health",
+                     "pm_felt_unsafe",
+                     "pm_phys_attacked", 
+                     "pm_theft", 
+                     "pm_disc")), 
+            by = "hh_id") |>
+  rename_at(vars(c("pm_illness_limit",
+                   "pm_sleep", 
+                   "pm_illness",
+                   "pm_physical_health1",
+                   "pm_felt_unsafe",
+                   "pm_phys_attacked", 
+                   "pm_theft", 
+                   "pm_disc")), 
+            ~paste0("fu2_", .))
+
+# Summarize outcomes generated ----
+summ(c("fu2_pm_harrasment",
+       "fu2_pm_physical_health"))
+```
+
+#### Mental Health
+
+```{r}
+#| label: Gen-MentHeatlh-Outcomes-PM
+
+# Cleaning outcome components ----
+pm_fu2 <- pm_fu2 |>
+  mutate(rev_pm_home_problems = (4 - pm_home_problems)/3,
+         rev_pm_idleness = (4 - pm_idleness)/3,
+         rev_pm_alcohol_consumption = (4 - pm_alcohol_consumption)/3,
+         rev_pm_family_death = (4 - pm_family_death)/3,
+         rev_pm_money_problems = (4 - pm_money_problems)/3,
+         rev_pm_debt_owed = (4 - pm_debt_owed)/3,
+         rev_pm_cant_find_work = (4 - pm_cant_find_work)/3,
+         rev_pm_cant_educate_children = (4 - pm_cant_educate_children)/3,
+         rev_pm_accidents_disasters = (4 - pm_accidents_disasters)/3,
+         pm_ladder_scale = pm_ladder_scale/10
+         ) 
+
+
+# Stress: Family (0-4) ----
+addIndex("pm_fu2",
+         c("rev_pm_home_problems",
+           "rev_pm_idleness",
+           "rev_pm_alcohol_consumption",
+           "rev_pm_family_death"),
+         "fu2_pm_famstress")
+
+# Stress: Economic (0-6) ----
+addIndex("pm_fu2",
+         c("rev_pm_money_problems",
+           "rev_pm_debt_owed",
+           "rev_pm_cant_find_work",
+           "rev_pm_cant_educate_children",
+           "rev_pm_accidents_disasters",
+           "pm_ladder_scale"),
+         "fu2_pm_econstress")
+
+```
+
+
+```{r}
+#| label: Summ-MentHealth-Outcomes-PM
+#| echo: False
+# Merge in outcomes to workfile ----
+workfile <- workfile |>
+  left_join(select(pm_fu2, hh_id,
+                   fu2_pm_econstress,
+                   fu2_pm_famstress,
+                   c("rev_pm_home_problems",
+                     "rev_pm_idleness",
+                     "rev_pm_alcohol_consumption",
+                     "rev_pm_family_death",
+                     "rev_pm_money_problems",
+                     "rev_pm_debt_owed",
+                     "rev_pm_cant_find_work",
+                     "rev_pm_cant_educate_children",
+                     "rev_pm_accidents_disasters",
+                     "pm_ladder_scale")),
+            by = "hh_id") |>
+  rename_at(vars("rev_pm_home_problems",
+                 "rev_pm_idleness",
+                 "rev_pm_alcohol_consumption",
+                 "rev_pm_family_death",
+                 "rev_pm_money_problems",
+                 "rev_pm_debt_owed",
+                 "rev_pm_cant_find_work",
+                 "rev_pm_cant_educate_children",
+                 "rev_pm_accidents_disasters",
+                 "pm_ladder_scale"), 
+            ~paste0("fu2_pm_", gsub("pm_", "", .)))
+
+# Summarize outcomes generated ----
+summ(c("fu2_pm_famstress",
+       "fu2_pm_econstress"))
+
+```
+
+#### Joint Decision-Making
+
+```{r}
+#| label: Gen-JointDecMake-Outcomes-PM
+
+
+# Consults with family on migration ----
+addIndex("pm_fu2",
+         c("pm_fam_discuss_migrate",
+           "pm_discuss_mig",
+           "pm_discuss_responsibilities"),
+         "fu2_pm_consult_mig")
+```
+
+```{r}
+#| label: Summ-JointDecMake-Outcomes-PM
+#| echo: False
+
+# Merge in outcomes to workfile ----
+workfile <- workfile |>
+  left_join(select(pm_fu2, hh_id,
+                   fu2_pm_consult_mig,
+                   c("pm_fam_discuss_migrate",
+                     "pm_discuss_mig",
+                     "pm_discuss_responsibilities")), 
+            by = "hh_id") |>
+  rename_at(vars(c("pm_fam_discuss_migrate",
+                     "pm_discuss_mig",
+                     "pm_discuss_responsibilities")),
+            ~paste0("fu2_", .))
+
+# Summarize outcomes generated ----
+summ(c("fu2_pm_consult_mig"))
+```
+
+### SHM
+
+#### Mental Health
+```{r}
+#| label: Gen-MentHeatlh-Outcomes-SHM
+
+# Cleaning outcome components ----
+shm_fu2 <- shm_fu2 |>
+  mutate(rev_shm_home_problems = (4 - shm_home_problems)/3,
+         rev_shm_idleness = (4 - shm_idleness)/3,
+         rev_shm_alcohol_consumption = (4 - shm_alcohol_consumption)/3,
+         rev_shm_family_death = (4 - shm_family_death)/3,
+         rev_shm_money_problems = (4 - shm_money_problems)/3,
+         rev_shm_debt_owed = (4 - shm_debt_owed)/3,
+         rev_shm_cant_find_work = (4 - shm_cant_find_work)/3,
+         rev_shm_cant_educate_children = (4 - shm_cant_educate_children)/3,
+         rev_shm_accidents_disasters = (4 - shm_accidents_disasters)/3,
+         shm_ladder_scale = shm_ladder_scale/10) 
+
+# Stress: Family (0-4) ----
+addIndex("shm_fu2",
+         c("rev_shm_home_problems",
+           "rev_shm_idleness",
+           "rev_shm_alcohol_consumption",
+           "rev_shm_family_death"),
+         "fu2_shm_famstress")
+
+# Stress: Economic (0-6) ----
+addIndex("shm_fu2",
+         c("rev_shm_money_problems",
+           "rev_shm_debt_owed",
+           "rev_shm_cant_find_work",
+           "rev_shm_cant_educate_children",
+           "rev_shm_accidents_disasters",
+           "shm_ladder_scale"),
+         "fu2_shm_econstress")
+```
+
+```{r}
+#| label: Summ-MentHeatlh-Outcomes-SHM
+#| echo: False
+# Merge in outcomes to workfile ----
+workfile <- workfile |>
+  left_join(select(shm_fu2, hh_id,
+                   fu2_shm_econstress,
+                   fu2_shm_famstress,
+                   c("rev_shm_home_problems",
+                     "rev_shm_idleness",
+                     "rev_shm_alcohol_consumption",
+                     "rev_shm_family_death",
+                     "rev_shm_money_problems",
+                     "rev_shm_debt_owed",
+                     "rev_shm_cant_find_work",
+                     "rev_shm_cant_educate_children",
+                     "rev_shm_accidents_disasters",
+                     "shm_ladder_scale")), 
+            by = "hh_id") |>
+  rename_at(vars(c("rev_shm_home_problems",
+                     "rev_shm_idleness",
+                     "rev_shm_alcohol_consumption",
+                     "rev_shm_family_death",
+                     "rev_shm_money_problems",
+                     "rev_shm_debt_owed",
+                     "rev_shm_cant_find_work",
+                     "rev_shm_cant_educate_children",
+                     "rev_shm_accidents_disasters",
+                     "shm_ladder_scale")),
+            ~paste0("fu2_shm_", gsub("shm_", "", .)))
+
+# Summarize outcomes generated ----
+summ(c("fu2_shm_famstress",
+       "fu2_shm_econstress"))
+
+```
+
+
+#### Joint Decision-Making
+
+```{r}
+#| label: Gen-JointDecMake-Outcomes-SHM
+
+# Cleaning outcome components ----
+# shm_fu2 <- shm_fu2 |>
+#   mutate_at(vars(shm_daily_hh_expenses_couple,
+#                  shm_hh_purchases_couple,
+#                  shm_fam_plan_couple,
+#                  shm_migrate_couple,
+#                  shm_vote_couple,
+#                  shm_school_couple), ~(5-.)/4) |>
+#   mutate_at(vars(shm_fam_discuss_work, 
+#                  shm_fam_discuss_community, 
+#                  shm_fam_discuss_election, 
+#                  shm_fam_discuss_invest,
+#                  shm_discuss_women,
+#                  shm_fam_discuss_migrate),
+#             ~./3)
+# 
+# # Consults with spouse (0-7) ----
+# addIndex("shm_fu2",
+#          c("shm_daily_hh_expenses_couple",
+#            "shm_hh_purchases_couple",
+#            "shm_fam_plan_couple",
+#            "shm_migrate_couple",
+#            "shm_vote_couple",
+#            "shm_school_couple",
+#            "shm_discuss_women"),
+#          "fu2_shm_jointdec")
+
+# Consults with family on issues other than migration (0-4) ----
+addIndex("shm_fu2",
+         c("shm_fam_discuss_work", 
+           "shm_fam_discuss_community", 
+           "shm_fam_discuss_election", 
+           "shm_fam_discuss_invest"),
+         "fu2_shm_consult_nonmig")
+
+# Consults with family on migration ----
+addIndex("shm_fu2",
+         c("shm_fam_discuss_migrate",
+           "shm_discuss_mig",
+           "shm_discuss_responsibilities"),
+         "fu2_shm_consult_mig")
+```
+
+
+```{r}
+#| label: Summ-JointDecMake-Outcomes-SHM
+#| echo: False
+# Merge in outcomes to workfile ----
+workfile <- workfile |>
+  left_join(select(shm_fu2, hh_id,
+                   # fu2_shm_jointdec,
+                   fu2_shm_consult_nonmig,
+                   fu2_shm_consult_mig,
+                   # c("shm_daily_hh_expenses_couple",
+                   #   "shm_hh_purchases_couple",
+                   #   "shm_fam_plan_couple",
+                   #   "shm_migrate_couple",
+                   #   "shm_vote_couple",
+                   #   "shm_school_couple",
+                   #   "shm_discuss_women",
+                     c("shm_fam_discuss_work", 
+                     "shm_fam_discuss_community", 
+                     "shm_fam_discuss_election", 
+                     "shm_fam_discuss_invest",
+                     "shm_fam_discuss_migrate",
+                     "shm_discuss_mig",
+                     "shm_discuss_responsibilities")),
+            by = "hh_id") |>
+  rename_at(vars(c(
+    # "shm_daily_hh_expenses_couple",
+    #                  "shm_hh_purchases_couple",
+    #                  "shm_fam_plan_couple",
+    #                  "shm_migrate_couple",
+    #                  "shm_vote_couple",
+    #                  "shm_school_couple",
+    #                  "shm_discuss_women",
+                     "shm_fam_discuss_work",
+                     "shm_fam_discuss_community", 
+                     "shm_fam_discuss_election", 
+                     "shm_fam_discuss_invest",
+                     "shm_fam_discuss_migrate",
+                     "shm_discuss_mig",
+                     "shm_discuss_responsibilities")),
+            ~paste0("fu2_", .))
+
+# Summarize outcomes generated ----
+summ(c(
+  # "fu2_shm_jointdec",
+       "fu2_shm_consult_mig",
+       "fu2_shm_consult_nonmig"))
+```
+
+### HoH
+
+
+#### HH Size 
+
+```{r}
+#| label: Gen-Size-HH
+
+# HH size ----
+hh_size <- hoh_fu2 |>
+  select(hh_id, matches("hoh_roster_age_[0-9]+")) |>
+  pivot_longer(cols = matches("hoh_roster_age_[0-9]+"),
+    names_to = c(".value", "livestock_num"),
+    names_pattern = "(.+)_([0-9]+)") |>
+  filter(!is.na(hoh_roster_age)) |>
+  mutate(above18 = 1*(hoh_roster_age >= 18),
+         below18 = 1*(hoh_roster_age < 18),
+         below15 = 1*(hoh_roster_age < 15),
+         above15 = 1*(hoh_roster_age >= 15),
+         dum = 1) |>
+  group_by(hh_id) |>
+  summarize(fu2_hh_members = sum(dum, na.rm = T),
+            fu2_hh_members_above18 = sum(above18, na.rm = T),
+            fu2_hh_members_below18 = sum(below18, na.rm = T),
+            fu2_hh_members_above15 = sum(above15, na.rm = T),
+            fu2_hh_members_below15 = sum(below15, na.rm = T))
+
+```
+
+```{r}
+#| label: Summ--Size-PM
+#| echo: False
+# Merge in outcomes to workfile ----
+workfile <- workfile |>
+  left_join(hh_size, 
+            by = "hh_id") 
+
+# Summarize outcomes generated ----
+summ(c("fu2_hh_members",
+       "fu2_hh_members_above18",
+       "fu2_hh_members_below18",
+       "fu2_hh_members_above15",
+       "fu2_hh_members_below15"))
+```
+
+
+#### Economic Well-Being
+
+```{r}
+#| label: Gen-Econ-Outcomes-HH
+
+# Cleaning outcome components ----
+hoh_fu2 <- hoh_fu2 |>
+  mutate(hoh_remit_send_niger_amt = -hoh_remit_send_niger_amt,
+         hoh_goods_send_niger_amt = -hoh_goods_send_niger_amt,
+         # hoh_livestock_expend = -hoh_livestock_expend/hhmembers,
+         # hoh_hire_livestock_total = -(hoh_hire_livestock_days*12*hoh_hire_livestock_wage)/hhmembers,
+         # hoh_borrow_total = -hoh_borrow_total,
+         hoh_adult_protein = case_when(hoh_adult_protein < 7 ~ 
+                                         hoh_adult_protein,
+                                   .default = 7),
+         hoh_child_protein = case_when(hoh_child_protein < 7 ~ 
+                                         hoh_child_protein,
+                                   .default = 7)) |>
+         # livestock_paid = hoh_paid_livestock_wage * 
+           # hoh_paid_livestock_days/hhmembers,
+         # hoh_total_income = hoh_total_income/hhmembers,
+         # hoh_rent_land_amt = - hoh_rent_land_amt/hhmembers) |>
+  mutate_at(vars(
+    # hoh_purchase_clothing, 
+    #              hoh_purchase_sheep, 
+    #              hoh_purchase_goat, 
+    #              hoh_purchase_poultry,
+                 c(getVarnames(hoh_fu2, "emerg_sell_[1-9]"),
+                   getVarnames(hoh_fu2, "emerg_borrow_[1-9]"),
+                   getVarnames(hoh_fu2, "emerg_consume_[1-9]"),
+                   getVarnames(hoh_fu2, "emerg_spend_[1-9]"))),
+            ~case_when(. < 0 ~ NA,
+                       .default = .)) |>
+  mutate_at(vars(hoh_adults_skip_meal_num, 
+                 hoh_adults_skip_days_num,
+                 hoh_adult_protein,
+                 hoh_child_skip_days_num,
+                 hoh_child_skip_meals_num,
+                 hoh_child_protein), ~./7) |>
+  # mutate_at(vars(matches("hoh_monthly_consumption_amt_"),
+  #                matches("hoh_weekly_consumption_amt_"),
+  #                # hoh_savings_total,
+  #                # hoh_borrow_total,
+  #                # hoh_earn_rent,
+  #                # hoh_income_gifts,
+  #                # hoh_earn_interest,
+  #                # hoh_biz_income,
+  #                ), ~./hhmembers) |>
+  # mutate(Y_1 = hoh_member_other_weeks_1 * hoh_member_other_amt_1/hhmembers,
+  #        Y_2 = hoh_member_other_weeks_2 * hoh_member_other_amt_2/hhmembers,
+  #        Y_3 = hoh_member_other_weeks_3 * hoh_member_other_amt_3/hhmembers,
+  #        Y_4 = hoh_member_other_weeks_4 * hoh_member_other_amt_4/hhmembers,
+  #        Y_5 = hoh_member_other_weeks_5 * hoh_member_other_amt_5/hhmembers,
+  #        Y_6 = hoh_member_other_weeks_6 * hoh_member_other_amt_6/hhmembers,
+  #        Y_7 = hoh_member_other_weeks_7 * hoh_member_other_amt_7/hhmembers,
+  #        Y_8 = hoh_member_other_weeks_8 * hoh_member_other_amt_8/hhmembers,
+  #        Y_9 = hoh_member_other_weeks_9 * hoh_member_other_amt_9/hhmembers,
+  #        Y_10 = hoh_member_other_weeks_10 * hoh_member_other_amt_10/hhmembers,
+  #        Y_11 = hoh_member_other_weeks_11 * hoh_member_other_amt_11/hhmembers,
+  #        Y_12 = hoh_member_other_weeks_12 * hoh_member_other_amt_12/hhmembers,
+  #        Y_13 = hoh_member_other_weeks_13 * hoh_member_other_amt_13/hhmembers,
+  #        Y_14 = hoh_member_other_weeks_14 * hoh_member_other_amt_14/hhmembers,
+  #        Y_15 = hoh_member_other_weeks_15 * hoh_member_other_amt_15/hhmembers,
+  #        Y_16 = hoh_member_other_weeks_16 * hoh_member_other_amt_16/hhmembers,
+  #        Y_17 = hoh_member_other_weeks_17 * hoh_member_other_amt_17/hhmembers,
+  #        Y_18 = hoh_member_other_weeks_18 * hoh_member_other_amt_18/hhmembers,
+  #        Y_19 = hoh_member_other_weeks_19 * hoh_member_other_amt_19/hhmembers,
+  #        Y_20 = hoh_member_other_weeks_20 * hoh_member_other_amt_20/hhmembers,
+  #        Y_21 = hoh_member_other_weeks_21 * hoh_member_other_amt_21/hhmembers,
+  #        Y_22 = hoh_member_other_weeks_22 * hoh_member_other_amt_22/hhmembers,
+  #        Y_23 = hoh_member_other_weeks_23 * hoh_member_other_amt_23/hhmembers,
+  #        Y_24 = hoh_member_other_weeks_24 * hoh_member_other_amt_24/hhmembers) |>
+  mutate(across(starts_with("hoh_crop_quantity_"), 
+              ~ . * get(sub("crop_quantity", "price_sold", cur_column())), 
+              .names = "A_{.col %>% str_extract('[0-9]+')}")) 
+
+# 
+# livestocks_price <- hoh_fu2 |>
+#   left_join(select(workfile, hh_id, com_id), by = "hh_id") |>
+#   select(hh_id, com_id, matches("hoh_livestock_name_"), 
+#          matches("hoh_livestock_own_"), 
+#          matches("hoh_livestock_value_")) |>
+#   pivot_longer(
+#     cols = matches("hoh_livestock_name_[0-9]+|hoh_livestock_own_|hoh_livestock_value_"),
+#     names_to = c(".value", "livestock_num"),
+#     names_pattern = "(.+)_([0-9]+)")  |>
+#   filter(hoh_livestock_name != "") |>
+#   mutate(livestock_id =   case_when(
+#     hoh_livestock_name %in% c("Poultry", "Volaille", "Kaji") ~ 1,
+#     hoh_livestock_name %in% c("Goats", "Chèvres", "Awaki") ~ 2,
+#     hoh_livestock_name %in% c("Sheep", "Mouton", "Tumaki") ~ 3,
+#     hoh_livestock_name %in% c("Cattle", "Vaches", "Shanu") ~ 4,
+#     hoh_livestock_name %in% c("Horses", "Les chevaux", "Dawaki") ~ 5,
+#     hoh_livestock_name %in% c("Camels", "Chameaux", "Rakumma") ~ 6,
+#     hoh_livestock_name %in% c("Donkey", "Âne", "Jaki") ~ 7,
+#     hoh_livestock_name %in% c("None", "Aucun", "Babu") ~ 0,
+#     TRUE ~ NA_real_  # In case of any unexpected value
+#   )) |>
+#   mutate(price = hoh_livestock_value/hoh_livestock_own) |>
+#   group_by(livestock_id) |>
+#   summarize(mean(hoh_livestock_value), median(hoh_livestock_value),
+#             mean(price), med_price = median(price)) |>
+#   arrange(livestock_id)
+# 
+# livestocks <- hoh_fu2 |>
+#   left_join(select(workfile, hh_id, com_id), by = "hh_id") |>
+#   select(hh_id, com_id, hhmembers,
+#          matches("hoh_livestock_act_name"), 
+#          matches("hoh_livestock_sold"), 
+#          matches("hoh_livestock_consumed")) |>
+#   pivot_longer(
+#     cols = matches("hoh_livestock_act_name_[0-9]+|hoh_livestock_sold_|hoh_livestock_consumed_"),
+#     names_to = c(".value", "livestock_num"),
+#     names_pattern = "(.+)_([0-9]+)")  |>
+#   filter(hoh_livestock_act_name != "") |>
+#   mutate(livestock_id =   case_when(
+#     hoh_livestock_act_name %in% c("Poultry", "Volaille", "Kaji") ~ 1,
+#     hoh_livestock_act_name %in% c("Goats", "Chèvres", "Awaki") ~ 2,
+#     hoh_livestock_act_name %in% c("Sheep", "Mouton", "Tumaki") ~ 3,
+#     hoh_livestock_act_name %in% c("Cattle", "Vaches", "Shanu") ~ 4,
+#     hoh_livestock_act_name %in% c("Horses", "Les chevaux", "Dawaki") ~ 5,
+#     hoh_livestock_act_name %in% c("Camels", "Chameaux", "Rakumma") ~ 6,
+#     hoh_livestock_act_name %in% c("Donkey", "Âne", "Jaki") ~ 7,
+#     hoh_livestock_act_name %in% c("None", "Aucun", "Babu") ~ 0,
+#     TRUE ~ NA_real_  # In case of any unexpected value
+#   ))
+# 
+# temp_livestock_df <- livestocks |>
+#   left_join(livestocks_price, 
+#             by = c("livestock_id")) |>
+#   mutate(X_sub = (hoh_livestock_sold + hoh_livestock_consumed)* med_price / hhmembers) |>
+#   group_by(hh_id) |>
+#   summarize(X = sum(X_sub))
+
+## price sold is  conditional on selling crop, which is not always the case. Need the xwalk to calculate this.
+#sum(crop_quantity * crops * price_sold) - sum(qty_sold * crops * price_sold) - sum(qty_consume * crops * price_sold) + sum(paid_ag * hire_ag_wage)
+#getVarnames(hoh_fu2, "crop_quantity")
+
+# hoh_fu2 |> 
+#   left_join(select(bl_workfile, hh_id, com_id, loc_id), by = "hh_id") |>
+#   select(hh_id, com_id, loc_id, matches("hoh_crop_name_"), 
+#          matches("hoh_crop_unit_[0-9]+"), 
+#          matches("hoh_price_sold")) |>
+#   pivot_longer(cols = starts_with("hoh_"),  
+#                names_to = c(".value", "index"), 
+#                names_pattern = "hoh_(.*)_(\\d+)") %>% 
+#   arrange(hh_id, index) |>
+#   group_by(crop_name, crop_unit, loc_id) |>
+#   summarize(loc_price = mean(price_sold, na.rm = T), n = n()) |>
+#   filter(!is.na(loc_price)) 
+
+
+temp_monthconscat_df <- hoh_fu2 |>
+  distinct(hh_id, .keep_all = T) |>
+  select(hh_id, 
+         matches("hoh_monthly_consumption_amt_[0-9]"),
+         matches("hoh_item_[0-9]")) |>
+  pivot_longer(
+    cols = matches("hoh_monthly_consumption_amt_[0-9]|hoh_item_[0-9]"),
+    names_to = c(".value", "item_number"),
+    names_pattern = "(.+)_([0-9]+)") |>
+    mutate(hoh_item = case_when(hoh_item %in% 
+                            c("Education (children, excluding school fees)", 
+                              "Education (enfants, hors frais de scolarité)",	
+                              "Tarbiya (yara, ban da kuɗin makaranta)") ~ "fu2_hh_monthcons_edu_child",
+                          hoh_item %in% 
+                            c("Education (adults, including vocational training)",
+                              "Éducation (adultes, y compris la formation professionnelle)",	
+                              "Ilimi (manya, gami da koyar da sana'a") ~ "fu2_hh_monthcons_edu_adult",
+                          hoh_item %in% 
+                            c("Healthcare",	"Soins de santé", "Kiwon lafiya") ~ "fu2_hh_monthcons_health",
+                          hoh_item %in% c("Ceremonies", "Cérémonies", "bukukuwa") ~ "fu2_hh_monthcons_ceremony",
+                          hoh_item %in% c("Clothes + shoes", "Vêtements + chaussures", 
+                                           "Tufafi + takalma") ~ "fu2_hh_monthcons_clothes",
+                          .default = NA)) |>
+  filter(hoh_item != "") |>
+  select(-item_number) |>
+  pivot_wider(names_from = "hoh_item", values_from = "hoh_monthly_consumption_amt") |>
+  mutate_at(vars(matches("fu2_hoh_monthcons")), ~case_when(is.na(.) ~ 0, .default = .))
+
+
+temp_weekconscat_df <- hoh_fu2 |>
+  distinct(hh_id, .keep_all = T) |>
+  select(hh_id, 
+         matches("hoh_weekly_consumption_amt_[0-9]"),
+         matches("hoh_item_week_[0-9]")) |>
+  pivot_longer(
+    cols = matches("hoh_weekly_consumption_amt_[0-9]|hoh_item_week_[0-9]"),
+    names_to = c(".value", "item_number"),
+    names_pattern = "(.+)_([0-9]+)") |>
+  mutate(hoh_item_week = case_when(hoh_item_week %in% 
+                            c("Food (for household members)",	
+                              "Nourriture (pour les membres du ménage)",
+                              "Abinci (ga mutanen gida)") ~ "fu2_hh_weekcons_food",
+                          hoh_item_week %in% 
+                            c("Mobile phone credit + charging", 
+                              "Crédit mobile + recharge", 
+                              "Kuɗin /kiredin kira a salula + caji") ~ "fu2_hh_weekcons_phone",
+                          hoh_item_week %in% 
+                            c("Fuel for home/ cooking (i.e. lighting, electricity, firewood)",
+                              "Combustible pour la maison/la cuisine (c.-à-d. éclairage, électricité, bois de chauffe)",	
+                              "Wutar dafa abinci da ta haske, wutar lantarki, itacen jin wuta)") ~ "fu2_hh_weekcons_homefuel",
+                          hoh_item_week %in% c("Fuel for vehicles",
+                                      "Carburant pour véhicules",
+                                      "Man fetur/isansi na mota") ~ "fu2_hh_weekcons_vehiclefuel",
+                          hoh_item_week %in% c("Transportation fare (taxi, moto taxi)",
+                                      "Frais de transport (taxi, moto taxi)",
+                                      "Kuɗin (taxi, kabu- kabu )") ~ "fu2_hh_weekcons_transport",
+                          hoh_item_week %in% c("Water (to drink)",
+                                      "Eau (à boire)",
+                                      "Ruwa (don sha)") ~ "fu2_hh_weekcons_water",
+                          .default = NA)) |>
+  filter(hoh_item_week != "") |>
+  select(-item_number) |>
+  pivot_wider(names_from = "hoh_item_week", values_from = "hoh_weekly_consumption_amt") |>
+  mutate_at(vars(matches("fu2_hh_weekcons")), ~case_when(is.na(.) ~ 0, .default = .))
+
+# 
+# # Livestock income (CFA) ----
+# hoh_fu2 <- left_join(hoh_fu2, temp_livestock_df, by = "hh_id") |>
+#   mutate(X = X/hhmembers) |>
+#   mutate_at(vars(c("livestock_paid",
+#            "X", "hoh_livestock_expend",
+#            "hoh_hire_livestock_total")), ~ifelse(is.na(.), 0, .))
+# 
+# 
+# addIndex("hoh_fu2",
+#          c("livestock_paid",
+#            "X", "hoh_livestock_expend",
+#            "hoh_hire_livestock_total"),
+#          "fu2_hh_livestock_inc")
+
+# 
+# # Other income (CFA) ----
+# addIndex("hoh_fu2",
+#          c(getVarnames(hoh_fu2, "^Y_[0-9]+$"), 
+#            "hoh_earn_rent",
+#            "hoh_income_gifts",
+#            "hoh_earn_interest"),
+#          "fu2_hh_other_inc")
+# 
+# # Business income (CFA) ----
+# addIndex("hoh_fu2",
+#          c("hoh_biz_income"),
+#          "fu2_hh_biz_inc")
+
+
+# Remittances (CFA) ---- 
+addIndex("hoh_fu2",
+         c("hoh_remit_rec_niger_amt",
+           "hoh_goods_rec_niger_amt",
+           "hoh_remit_send_niger_amt",
+           "hoh_goods_send_niger_amt"),
+         "fu2_hh_remit")
+# 
+# # Savings (CFA) ----
+# addIndex("hoh_fu2",
+#          c("hoh_savings_total",
+#            "hoh_borrow_total"),
+#          "fu2_hh_savings_pc")
+
+
+# Monthly expenditures (CFA) ----
+addIndex("hoh_fu2",
+         c("hoh_monthly_consumption_amt_1",
+           "hoh_monthly_consumption_amt_2",
+           "hoh_monthly_consumption_amt_3",
+           "hoh_monthly_consumption_amt_4",
+           "hoh_monthly_consumption_amt_5"),
+         "fu2_hh_monthly_cons")
+
+# Weekly expenditures (CFA) ----
+addIndex("hoh_fu2",
+         c("hoh_weekly_consumption_amt_1",
+           "hoh_weekly_consumption_amt_2",
+           "hoh_weekly_consumption_amt_3",
+           "hoh_weekly_consumption_amt_4",
+           "hoh_weekly_consumption_amt_5",
+           "hoh_weekly_consumption_amt_6"),
+         "fu2_hh_weekly_cons")
+
+# Adult food security (0-3) ----
+addIndex("hoh_fu2",
+         c("hoh_adults_skip_meal_num", 
+           "hoh_adults_skip_days_num",
+           "hoh_adult_protein"), 
+         "fu2_hh_adult_foodsec")
+
+
+# Child food security (0-3) ----
+addIndex("hoh_fu2",
+         c("hoh_child_skip_meals_num", 
+           "hoh_child_skip_days_num",
+           "hoh_child_protein"), 
+         "fu2_hh_child_foodsec")
+
+## Reversing so it is food security
+hoh_fu2 <- hoh_fu2 |>
+  mutate(fu2_hh_adult_foodsec = 3 - fu2_hh_adult_foodsec,
+         fu2_hh_child_foodsec = 3 - fu2_hh_child_foodsec)
+
+
+# Economic Precarity (events) ----
+addIndex("hoh_fu2",
+         c(getVarnames(hoh_fu2, "emerg_sell_[1-9]"),
+           getVarnames(hoh_fu2, "emerg_borrow_[1-9]"),
+           getVarnames(hoh_fu2, "emerg_consume_[1-9]"),
+           getVarnames(hoh_fu2, "emerg_spend_[1-9]")),
+         "fu2_hh_emerg_event")
+
+# Economic Precarity (cost in CFA) ----
+addIndex("hoh_fu2",
+         c(getVarnames(hoh_fu2, "emerg_sell_amt_[1-9]"),
+           getVarnames(hoh_fu2, "emerg_borrow_amt_[1-9]"),
+           getVarnames(hoh_fu2, "emerg_spend_amt_[1-9]")),
+         "fu2_hh_emerg_cost")
+```
+
+
+```{r}
+#| label: Summ-Econ-Outcomes-HH
+#| echo: False
+# Merge in outcomes to workfile ----
+workfile <- workfile |>
+  left_join(select(hoh_fu2, hh_id,
+                   # fu2_hh_livestock_inc,
+                   # fu2_hh_livestock_paid = livestock_paid,
+                   # fu2_hh_livestock_value = X, 
+                   # fu2_hh_livestock_expend = hoh_livestock_expend,
+                   # fu2_hh_hire_livestock_total = hoh_hire_livestock_total,
+                   # fu2_hh_other_inc,
+                   # fu2_hh_biz_inc,
+                   fu2_hh_remit,
+                   # fu2_hh_savings_pc,
+                   fu2_hh_monthly_cons,
+                   fu2_hh_weekly_cons,
+                   fu2_hh_adult_foodsec,
+                   fu2_hh_child_foodsec,
+                   fu2_hh_emerg_event,
+                   fu2_hh_emerg_cost), 
+            by = "hh_id") |>
+  left_join(temp_monthconscat_df, by = "hh_id") |>
+  left_join(temp_weekconscat_df, by = "hh_id") |>
+  mutate_at(vars(matches("fu2_hh_weekcons|fu2_hh_monthcons")), 
+            ~case_when(fu2_hoh_comp == 1 & is.na(.) ~ 0,
+                       .default = .))
+
+
+# Summarize outcomes generated ----
+summ(c(
+  # "fu2_hh_ag_inc",
+  #      "fu2_hh_livestock_inc",
+  #      "fu2_hh_other_inc", 
+  #      "fu2_hh_biz_inc", 
+       "fu2_hh_remit",
+       # "fu2_hh_savings_pc",
+       "fu2_hh_monthly_cons",
+       "fu2_hh_weekly_cons",
+       # "fu2_hh_fest_cons",
+       "fu2_hh_adult_foodsec",
+       "fu2_hh_child_foodsec",
+       "fu2_hh_emerg_event",
+       "fu2_hh_emerg_cost"))
+```
+
+#### Investments
+
+```{r}
+#| label: Gen-Inv-Outcomes-HH
+
+# Cleaning outcome components ----
+temp_df <- hoh_fu2 |>
+  # mutate(Z_1 = hoh_livestock_bought_1 * hoh_livestock_value_1,
+  #        Z_2 = hoh_livestock_bought_2 * hoh_livestock_value_2,
+  #        Z_3 = hoh_livestock_bought_3 * hoh_livestock_value_3,
+  #        Z_4 = hoh_livestock_bought_4 * hoh_livestock_value_4,
+  #        Z_5 = hoh_livestock_bought_5 * hoh_livestock_value_5,
+  #        Z_6 = hoh_livestock_bought_6 * hoh_livestock_value_6,
+  #        Z_7 = hoh_livestock_bought_7 * hoh_livestock_value_7,
+  #        A = 1*(hoh_durable_asset_10 == 1) + 1*(hoh_durable_asset_11 == 1) + 
+  #          1*(hoh_durable_asset_12 == 1),
+  #        C_1 = hoh_livestock_own_1 * hoh_livestock_value_1,
+  #        C_2 = hoh_livestock_own_2 * hoh_livestock_value_2,
+  #        C_3 = hoh_livestock_own_3 * hoh_livestock_value_3,
+  #        C_4 = hoh_livestock_own_4 * hoh_livestock_value_4,
+  #        C_5 = hoh_livestock_own_5 * hoh_livestock_value_5,
+  #        C_6 = hoh_livestock_own_6 * hoh_livestock_value_6,
+  #        C_7 = hoh_livestock_own_7 * hoh_livestock_value_7,) |>
+  mutate_at(vars(matches("hoh_roster_age_[0-9]+")), 
+            ~case_when(. %in% 4:27 ~ 1,
+                       .default = 0)) |>
+  rowwise() |>
+  mutate(N_schoolage = 
+             sum(c_across(matches("hoh_roster_age_[0-9]+")), na.rm = T),
+         B = 
+             sum(c_across(matches("hoh_durable_asset_[0-9]+")), na.rm = T),
+         cost_school = 
+           sum(c_across(matches("hoh_school_cost_[0-9]+")), na.rm = T)) |>
+  ungroup()
+
+# # Business investment (livestock purchase, business/land improvement) ----
+# addIndex("temp_df",
+#          c(getVarnames(hoh_fu2, "^Z_[0-9]$"),
+#          "A", "hoh_improve_business",
+#          "hoh_improve_land",
+#          "hoh_land_purchased"),
+#          "fu2_hh_biz_inv")
+
+# Education (number of children enrolled) ----
+addIndex("temp_df",
+         getVarnames(hoh_fu2, 
+                     "hoh_attending_school"),
+         "fu2_hh_enroll_num")
+
+# Assets (durable goods, livestock, home, land) ----
+# addIndex("temp_df",
+#          c("B",
+#            getVarnames(temp_df, "^C_[0-7]+$"),
+#            "hoh_improve_add_rooms",
+#            "hoh_improve_floors",
+#            "hoh_improve_walls",
+#            "hoh_improve_roof",
+#            "hoh_home_value",
+#            "hoh_improve_home_amt",
+#            "hoh_own_hectares"),
+#          "fu2_hh_assets")
+```
+
+
+```{r}
+#| label: Summ-Inv-Outcomes-HH
+#| echo: False
+# Merge in outcomes to workfile ----
+workfile <- workfile |>
+  left_join(select(temp_df, hh_id,
+                   # fu2_hh_biz_inv,
+                   fu2_hh_enroll_num),
+                   # fu2_hh_assets), 
+            by = "hh_id") 
+
+
+# Summarize outcomes generated ----
+summ(c(
+  # "fu2_hh_biz_inv",
+       # "fu2_hh_enroll_cost",
+       "fu2_hh_enroll_num"))
+       # "fu2_hh_assets"))
+
+rm(temp_df)
+```
+
+
+## Secondary Outcomes
+
+### PM
+
+#### Family Structure
+
+```{r}
+#| label: Summ-Fam-Outcomes-PM
+#| echo: False
+# Merge in outcomes to workfile ----
+workfile <- workfile |>
+  left_join(select(pm_fu2, hh_id,
+                   fu2_pm_marital_status = pm_married), 
+            by = "hh_id") 
+
+# Summarize outcomes generated ----
+summ(c("fu2_pm_marital_status"))
+```
+
+#### Investment
+
+```{r}
+#| label: Gen-Inv-Outcomes-PM
+
+# Investments in training cost (CFA) ----
+# addIndex("pm_fu2",
+#          c("pm_lang_train_cost",
+#            "pm_voc_train_cost"),
+#          "fu2_pm_inv_cost")
+```
+
+```{r}
+#| label: Summ-Inv-Outcomes-PM
+#| echo: False
+# Merge in outcomes to workfile ----
+# workfile <- workfile |>
+#   left_join(select(pm_fu2, hh_id,
+#                    fu2_pm_inv_cost), 
+#             by = "hh_id") 
+# 
+# # Summarize outcomes generated ----
+# summ(c("fu2_pm_inv_cost"))
+```
+
+
+### SHM
+
+#### Attitudes and Values
+
+```{r}
+#| label: Gen-AttValues-Outcomes-SHM
+
+# Cleaning outcome components ----
+# shm_fu2 <- shm_fu2 |>
+#   mutate_at(vars(matches("shm_tol")), ~./10) |>
+#   mutate_at(vars(shm_marry_daughter_relig, 
+#                  shm_marry_daughter_eth,
+#                  shm_marry_son_relig,
+#                  shm_marry_son_eth), ~1*(. == 1)) |>
+#   mutate(rev_shm_prob_other_ethnicity = (4-shm_prob_other_ethnicity)/3)
+
+# Tolerance (0-9) ----
+# addIndex("shm_fu2",
+#          c("shm_tol_relig",
+#            "shm_tol_eth",
+#            "shm_tol_mig",
+#            "shm_tol_muslim",
+#            "rev_shm_prob_other_ethnicity",
+#            "shm_marry_daughter_eth",
+#            "shm_marry_daughter_relig", 
+#            "shm_marry_son_relig",
+#            "shm_marry_son_eth"),
+#          "fu2_shm_tolerance")
+```
+
+```{r}
+#| label: Summ-AttValues-Outcomes-SHM
+#| echo: False
+# Merge in outcomes to workfile ----
+# workfile <- workfile |>
+#   left_join(select(shm_fu2, hh_id,
+#                    fu2_shm_tolerance,
+#                    c("shm_tol_relig",
+#                      "shm_tol_eth",
+#                      "shm_tol_mig",
+#                      "shm_tol_muslim",
+#                      "rev_shm_prob_other_ethnicity",
+#                      "shm_marry_daughter_eth",
+#                      "shm_marry_daughter_relig", 
+#                      "shm_marry_son_relig",
+#                      "shm_marry_son_eth")), 
+#             by = "hh_id") |>
+#   rename_at(vars(c("shm_tol_relig",
+#                      "shm_tol_eth",
+#                      "shm_tol_mig",
+#                      "shm_tol_muslim",
+#                      "rev_shm_prob_other_ethnicity",
+#                      "shm_marry_daughter_eth",
+#                      "shm_marry_daughter_relig", 
+#                      "shm_marry_son_relig",
+#                      "shm_marry_son_eth")),
+#             ~paste0("fu2_shm_", gsub("shm_", "", .)))
+# 
+# Summarize outcomes generated ----
+# summ(c("fu2_shm_tolerance"))
+
+```
+
+
+#### Manipulation Checks
+
+```{r}
+#| label: Gen-ManiCheck-Outcomes-SHM
+
+# # Cleaning outcome components ----
+# shm_fu2 <- shm_fu2 |>
+#   mutate(shm_time_ecowas_correct = 1*(shm_time_ecowas == 3)) 
+# 
+# # Knowledge of regular migration (0-8) ----
+# addIndex("shm_fu2", 
+#          c("shm_docs_required_civ_3",
+#            "shm_docs_required_civ_3",
+#            "shm_time_ecowas_correct",
+#            "shm_docs_required_libya_2", 
+#            "shm_docs_required_libya_4", 
+#            "shm_docs_required_libya_6",
+#            "shm_vax_req_1", "shm_vax_req_2"), 
+#          "fu2_shm_know_mig_reqs")
+```
+
+
+```{r}
+#| label: Summ-ManiCheck-Outcomes-SHM
+#| echo: False
+
+# # Merge in outcomes to workfile ----
+# workfile <- workfile |>
+#   left_join(select(shm_fu2, hh_id,
+#                    fu2_shm_know_mig_reqs,
+#                    c("shm_docs_required_civ_3",
+#                "shm_docs_required_civ_3",
+#                "shm_time_ecowas_correct",
+#                "shm_docs_required_libya_2", 
+#                "shm_docs_required_libya_4", 
+#                "shm_docs_required_libya_6",
+#                "shm_vax_req_1", "shm_vax_req_2")), 
+#             by = "hh_id") |>
+#   rename_at(vars(c("shm_docs_required_civ_3",
+#                "shm_docs_required_civ_3",
+#                "shm_time_ecowas_correct",
+#                "shm_docs_required_libya_2", 
+#                "shm_docs_required_libya_4", 
+#                "shm_docs_required_libya_6",
+#                "shm_vax_req_1", "shm_vax_req_2")),
+#             ~paste0("fu2_", .))
+# 
+# # Summarize outcomes generated ----
+# summ(c("fu2_shm_know_mig_reqs"))
+```
+
+
+# Saving Final Workfile
+
+```{r}
+workfile |>
+  write.csv(here("data/out/fu2/workfile-final.csv"),
+            na = '',
+            row.names = F) 
+```

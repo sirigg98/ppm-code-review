@@ -1,0 +1,245 @@
+---
+title: "Outcomes - Program Data"
+author: "Sirig Gurung"
+date: today
+fontsize: 10pt
+mainfont: Fira Sans
+fontfamily: Fira Sans
+monofont: Fira Code
+code-line-numbers: true
+df-print: kable
+highlight-style: tango
+number-sections: true
+toc: false
+lot: false
+echo: true
+warning: false
+header-includes:
+  - \usepackage{float}
+  - \floatplacement{table}{H}
+  - \floatplacement{figure}{H}
+format: 
+  pdf:
+    fig-pos: 'H'
+    tbl-pos: 'H'
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+#| echo: false
+#| results: hide
+
+rm(list = ls())
+
+pkgs <- c("tidyverse", "modelsummary", "here", "data.table")
+
+sapply(pkgs, require, character.only = TRUE)
+rm(pkgs)
+
+options(knitr.kable.NA = 0)
+options(modelsummary_format_numeric_latex = "plain")
+```
+
+
+```{r}
+#| label: get-program-data
+
+# set implementation data folder ----
+if (Sys.getenv("LOGNAME") == "siriggurung") {
+  PD_directory  <- "/Users/siriggurung/Library/CloudStorage/Box-Box/PPM/prebaseline_april2021/data/Implementation data"
+}
+
+# Load program data by commune, append data ----
+communes <- c("Badaguichiri", "Bouza", "Illela", 
+              "Kalfou", "Keita", "Tahoua I", 
+              "Tahoua II", "Tamaske")
+
+for (com in communes) {
+  ## PPM ----
+  cat(paste0("Loading data for ", com, "... \n"))
+  p1_ppm <- readxl::read_excel(paste0(PD_directory, "/", com, 
+                           "/Phase 1 - ", 
+                           com, ".xlsx"),
+                           sheet = "PPM", 
+                           skip = 2) |>
+    select(hh_id, commune_name, S = group, 
+           pm_dialogue1, pm_dialogue2, 
+           shm_dialogue1, shm_dialogue2,
+           phone = phone_recu, sim = phone_sim_recu, 
+           credit = phone_credit_recu, 
+           any_of(c("ppm_rec_cash1", "proxy_rec_cash1",
+           "ppm_rec_cash2", "proxy_rec_cash2")), 
+           matches("pm_jour"), matches("shm_jour"))
+  p2_ppm <- readxl::read_excel(paste0(PD_directory, "/", com, 
+                           "/Phase 2 - ", 
+                           com, ".xlsx"),
+                           sheet = "PPM", 
+                           skip = 2) |>
+    select(hh_id, commune_name, S = group, 
+           pm_dialogue1, pm_dialogue2, 
+           shm_dialogue1, shm_dialogue2,
+           phone = phone_recu, sim = phone_sim_recu, 
+           credit = phone_credit_recu, 
+           any_of(c("ppm_rec_cash1", "proxy_rec_cash1",
+           "ppm_rec_cash2", "proxy_rec_cash2")), 
+           matches("pm_jour"), matches("shm_jour")) 
+  
+  ppm_df <- bind_rows(p1_ppm, p2_ppm) |>
+    mutate(Z = "ppm",
+           S = "mc")
+  
+  ## UCT ----
+  p1_uct <- readxl::read_excel(paste0(PD_directory, "/", com, 
+                           "/Phase 1 - ", 
+                           com, ".xlsx"),
+                           sheet = "UCT", 
+                           skip = 2) |>
+    select(hh_id, commune_name, S = group,
+           phone = phone_recu, sim = phone_sim_recu, 
+           credit = phone_credit_recu, 
+           any_of(c("ppm_rec_cash1", "proxy_rec_cash1",
+           "ppm_rec_cash2", "proxy_rec_cash2")))
+  p2_uct <- readxl::read_excel(paste0(PD_directory, "/", com, 
+                           "/Phase 2 - ", 
+                           com, ".xlsx"),
+                           sheet = "UCT", 
+                           skip = 2) |>
+    select(hh_id, commune_name, S = group,
+           phone = phone_recu, sim = phone_sim_recu, 
+           credit = phone_credit_recu,
+           ppm_attended1, 
+           any_of(c("ppm_rec_cash1", "proxy_rec_cash1",
+           "ppm_rec_cash2", "proxy_rec_cash2")))
+  
+  uct_df <- bind_rows(p1_uct, p2_uct) |>
+    mutate(Z = "uct",
+           S = "mc")
+  
+  ## Control ----
+  p1_c <- readxl::read_excel(paste0(PD_directory, "/", com, 
+                           "/Phase 1 - ", 
+                           com, ".xlsx"),
+                           sheet = "Control", 
+                           skip = 2) |>
+    select(hh_id, commune_name, S = group,
+           phone = phone_recu, sim = phone_sim_recu, 
+           credit = phone_credit_recu)
+  p2_c <- readxl::read_excel(paste0(PD_directory, "/", com, 
+                           "/Phase 2 - ", 
+                           com, ".xlsx"),
+                           sheet = "Control", 
+                           skip = 2) |>
+    select(hh_id, commune_name, S = group,
+           phone = phone_recu, sim = phone_sim_recu, 
+           credit = phone_credit_recu)
+  
+  control_df <- bind_rows(p1_c, p2_c) |>
+    mutate(Z = "c",
+           S = case_when(S == "programmation" ~ "mc",
+                         .default = "pc"))
+  
+  ## Eligible PPM ----
+  p1_ppm_el <- readxl::read_excel(paste0(PD_directory, "/", com, 
+                           "/Phase 1 - ", 
+                           com, ".xlsx"),
+                           sheet = "PPM_eligible", 
+                           skip = 2) |>
+    select(hh_id, Eligible)
+  p2_ppm_el <- readxl::read_excel(paste0(PD_directory, "/", com, 
+                           "/Phase 2 - ", 
+                           com, ".xlsx"),
+                           sheet = "PPM_eligible", 
+                           skip = 2) |>
+    select(hh_id, Eligible)
+  
+  eligible <- bind_rows(p1_ppm_el, p2_ppm_el)
+  
+  if (com == "Badaguichiri") {
+    final_df <- bind_rows(ppm_df, uct_df) |>
+      bind_rows(control_df) |>
+      left_join(eligible, by = "hh_id")
+  } else {
+    append_df <- bind_rows(ppm_df, uct_df) |>
+      bind_rows(control_df)  |>
+      left_join(eligible, by = "hh_id")
+    final_df <- bind_rows(final_df, append_df)
+  }
+}
+```
+
+
+```{r}
+#| label: gen-PD-outcomes
+
+# Eligibility Criterion:
+## Control: received phone
+## UCT: received both disbursements and phone
+## PPM: at least 6 days of trainings, at least 1 hh dialogue, ID + Vax record, received both disbursements
+
+final_df <- final_df |>
+  arrange(S, Z, hh_id) |>
+  select(hh_id, S, Z, commune_name, everything()) |> 
+  mutate(pm_attendance = case_when(Z == "ppm" ~paste(pm_jour1, 
+                                                  pm_jour2, 
+                                                  pm_jour3, 
+                                                  pm_jour4, 
+                                                  pm_jour5, 
+                                                  pm_jour6,
+                                                  pm_jour7, 
+                                                  pm_jour8),
+                                .default = ""),
+         impl_pm_training_att = str_count(pm_attendance, "Oui"), 
+         shm_attendance = case_when(Z == "ppm" ~paste(shm_jour2,
+                                                  shm_jour7),
+                                .default = ""),
+         impl_shm_training_att = str_count(shm_attendance, "Oui"), 
+         impl_rec_phone = case_when(phone == "Oui" ~ 1,
+                               .default = 0),
+         impl_rec_both_cash = case_when((ppm_rec_cash1 == "Oui" | 
+                                      proxy_rec_cash1 == "Oui") & 
+                                     (ppm_rec_cash2 == "Oui" | 
+                                        proxy_rec_cash2 == "Oui") ~ 1,
+                                   .default = 0),
+         impl_att_one_pm_diag = case_when(pm_dialogue1 == "Oui" | 
+                                        pm_dialogue2 == "Oui" ~ 1,
+                                      .default = 0),
+         impl_att_one_shm_diag = case_when(shm_dialogue1 == "Oui" | 
+                                        shm_dialogue2 == "Oui" ~ 1,
+                                      .default = 0),
+         impl_compliant = case_when(Eligible == "Yes" & 
+                                     Z == "ppm" & 
+                                     impl_rec_both_cash == 1 ~ 1, 
+                                   impl_rec_both_cash == 1 & 
+                                     impl_rec_phone == 1 &
+                                     Z == "uct" ~ 1,
+                                   impl_rec_phone == 1 &
+                                     Z == "c" ~ 1,
+                                   .default = 0)) |> 
+  select(hh_id, commune_name, S, Z, impl_rec_both_cash,
+         impl_pm_training_att, impl_shm_training_att,
+         impl_rec_phone, impl_att_one_pm_diag, 
+         impl_att_one_shm_diag, impl_compliant)
+```
+
+```{r}
+final_df |> 
+  group_by(S, Z) |>
+  summarize(mean(impl_rec_both_cash),
+            mean(impl_rec_phone),
+            mean(impl_att_one_pm_diag),
+            mean(impl_att_one_shm_diag),
+            mean(impl_compliant),
+            mean(impl_pm_training_att),
+            mean(impl_shm_training_att))
+
+
+final_df |>
+  write.csv(here("data/out/Program Data/implementation-data.csv"),
+            na = '',
+            row.names = F) 
+```
+
+
+
+
