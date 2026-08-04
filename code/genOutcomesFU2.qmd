@@ -758,7 +758,20 @@ summ(c("fu2_pm_famstress",
 
 # Cleaning outcome components ----
 pm_fu2 <- pm_fu2 |>
-  mutate_at(vars(pm_fam_discuss_migrate), ~./3)
+  mutate_at(vars(pm_fam_discuss_work,
+                 pm_fam_discuss_community,
+                 pm_fam_discuss_election,
+                 pm_fam_discuss_invest,
+                 pm_fam_discuss_migrate),
+            ~./3)
+
+# Consults with family on issues other than migration (0-4) ----
+addIndex("pm_fu2",
+         c("pm_fam_discuss_work",
+           "pm_fam_discuss_community",
+           "pm_fam_discuss_election",
+           "pm_fam_discuss_invest"),
+         "fu2_pm_consult_nonmig")
 
 # Consults with family on migration ----
 addIndex("pm_fu2",
@@ -776,17 +789,26 @@ addIndex("pm_fu2",
 workfile <- workfile |>
   left_join(select(pm_fu2, hh_id,
                    fu2_pm_consult_mig,
-                   c("pm_fam_discuss_migrate",
+                   fu2_pm_consult_nonmig,
+                   c("pm_fam_discuss_work",
+                     "pm_fam_discuss_community",
+                     "pm_fam_discuss_election",
+                     "pm_fam_discuss_invest",
+                     "pm_fam_discuss_migrate",
                      "pm_discuss_mig",
-                     "pm_discuss_responsibilities")), 
+                     "pm_discuss_responsibilities")),
             by = "hh_id") |>
-  rename_at(vars(c("pm_fam_discuss_migrate",
+  rename_at(vars(c("pm_fam_discuss_work",
+                     "pm_fam_discuss_community",
+                     "pm_fam_discuss_election",
+                     "pm_fam_discuss_invest",
+                     "pm_fam_discuss_migrate",
                      "pm_discuss_mig",
                      "pm_discuss_responsibilities")),
             ~paste0("fu2_", .))
 
 # Summarize outcomes generated ----
-summ(c("fu2_pm_consult_mig"))
+summ(c("fu2_pm_consult_mig", "fu2_pm_consult_nonmig"))
 ```
 
 ### SHM
