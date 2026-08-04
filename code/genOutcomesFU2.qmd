@@ -212,7 +212,7 @@ non_ec_mig <- pm_fu2 |>
          fu2_pm_border_cross_nonec_num = str_count(pm_countries, 
                                                    "\\b(?:2|4|5|8|11|12|20|21)\\b"),
          dum_ec = 1*(fu2_pm_border_cross_ecowas_num > 0),
-         fu2_pm_border_cross_nonec = 1*(fu2_pm_border_cross_nonec_num)) |>
+         fu2_pm_border_cross_nonec = 1*(fu2_pm_border_cross_nonec_num > 0)) |>
   select(hh_id, fu2_pm_border_cross_nonec)
 
 

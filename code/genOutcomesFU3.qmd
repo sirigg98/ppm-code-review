@@ -355,8 +355,8 @@ pm_fu3_temp <- pm_fu3 |>
   mutate(num_ec = str_count(pm_countries, "\\b(?:3|6|7|9|10|13|14|15|16|17|18|19)\\b"),
          num_nonec = str_count(pm_countries, "\\b(?:2|4|5|8|11|12|20|21)\\b"),
          dum_ec = 1*(num_ec > 0),
-         pm_border_cross_nonec = 1*(num_nonec)) |>
-  right_join(select(pm_workfile_fu3, hh_id, 
+         pm_border_cross_nonec = 1*(num_nonec > 0)) |>
+  right_join(select(pm_workfile_fu3, hh_id,
                    pm_mig_any,
                    pm_dom_mig,
                    pm_border_cross,
