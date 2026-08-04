@@ -1178,9 +1178,9 @@ addIndex("pm_bl",
 # Cosmopolitan index (0-2) ----
 pm_bl <- pm_bl |>
   mutate(constrain_customs = as.numeric(constrain_customs),
-         constrain_customs = (constrain_customs-1)/2,
+         constrain_customs = 1L*(constrain_customs == 1),
          free_move = as.numeric(free_move),
-         free_move = (free_move-1)/3)
+         free_move = (4 - free_move)/3)
 
 addIndex("pm_bl",
          c("constrain_customs",
