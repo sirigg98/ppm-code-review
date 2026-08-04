@@ -669,8 +669,10 @@ temp_loc_harras_df <- pm_fu4 |>
   summarize(pm_felt_unsafe = max(pm_felt_unsafe, na.rm = T),
             pm_phys_attacked = max(pm_phys_attacked, na.rm = T),
             pm_theft = max(pm_theft, na.rm = T),
-            pm_disc = max(pm_disc, na.rm = T))
-  
+            pm_disc = max(pm_disc, na.rm = T)) |>
+  mutate(across(c(pm_felt_unsafe, pm_phys_attacked, pm_theft, pm_disc),
+                ~ifelse(is.infinite(.), NA, .)))
+
 pm_fu4 <- pm_fu4 |>
   left_join(temp_loc_harras_df, by = "hh_id")
 rm(temp_loc_harras_df)
