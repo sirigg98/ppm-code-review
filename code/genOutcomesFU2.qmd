@@ -602,8 +602,10 @@ pm_fu2 <- pm_fu2 |>
                               pm_disc_2,
                               pm_disc_3,
                               pm_disc_4, na.rm = T)) |>
-  ungroup()
-  
+  ungroup() |>
+  mutate(across(c(pm_felt_unsafe, pm_phys_attacked, pm_theft, pm_disc),
+                ~ifelse(is.infinite(.), NA, .)))
+
 addIndex("pm_fu2",
          c("pm_felt_unsafe",
            "pm_phys_attacked", 

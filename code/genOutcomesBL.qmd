@@ -809,7 +809,8 @@ temp_safety_health_df <- pm_locacts_bl |>
             theft = max(theft, na.rm = T),
             disc = max(disc, na.rm = T),
             illness = max(illness, na.rm = T)) |>
-  filter(!is.infinite(felt_unsafe))
+  mutate(across(c(felt_unsafe, phys_attacked, theft, disc, illness),
+                ~ifelse(is.infinite(.), NA, .)))
 
 pm_bl <- pm_bl |>
   mutate_at(vars(illness_limit, 
