@@ -812,7 +812,11 @@ temp_loc_share_df <- pm_fu5 |>
     names_to = c(".value", "loc_ind"),
     names_pattern = "(.+)_([0-9]+)") |>
   filter(pm_location_period_lab == "From our most recent phone survey (September 2024) to now") |>
-  mutate(pm_share_income_amt = pm_share_income_amt/pm_location_weeks,
+  mutate(pm_share_income_amt = case_when(pm_share_income == 0 ~ 0,
+                                          .default = pm_share_income_amt),
+         pm_rec_income_amt = case_when(pm_rec_income == 0 ~ 0,
+                                        .default = pm_rec_income_amt),
+         pm_share_income_amt = pm_share_income_amt/pm_location_weeks,
          pm_rec_income_amt = pm_rec_income_amt/pm_location_weeks) |>
   group_by(hh_id) |>
   summarize(fu5_pm_share_income = mean(pm_share_income_amt, na.rm = T),
