@@ -685,29 +685,40 @@ pm_el_temp <- pm_el |>
          pm_intent_mig_any = 1*(pm_intent_dom_mig == 1 | 
                                       pm_intent_border_cross == 1 |
                                       pm_intent_border_cross_ecowas == 1)) |>
-  right_join(select(pm_workfile_fu5, 
-                    matches("fu5_pm_intent_"), 
-                    hh_id), 
+  right_join(select(pm_workfile_fu5,
+                    matches("fu5_pm_intent_"),
+                    hh_id),
              by = "hh_id") |>
-  mutate(el_pm_intent_mig_any = case_when(is.na(pm_intent_mig_any) & 
-                                             is.na(fu5_pm_intent_mig_any) ~ NA,
-                                .default = pmax(pm_intent_mig_any, 
-                                                fu5_pm_intent_mig_any, 
+  left_join(select(workfile, hh_id, el_pm_mig_any, el_pm_dom_mig,
+                   el_pm_border_cross, el_pm_border_cross_ecowas),
+            by = "hh_id") |>
+  mutate(el_pm_intent_mig_any = case_when(is.na(pm_intent_mig_any) &
+                                             is.na(fu5_pm_intent_mig_any) &
+                                             is.na(el_pm_mig_any) ~ NA,
+                                .default = pmax(pm_intent_mig_any,
+                                                fu5_pm_intent_mig_any,
+                                                el_pm_mig_any,
                                                 na.rm = T)),
-         el_pm_intent_dom_mig = case_when(is.na(pm_intent_dom_mig) & 
-                                             is.na(fu5_pm_intent_dom_mig) ~ NA,
-                                .default = pmax(pm_intent_dom_mig, 
-                                                fu5_pm_intent_dom_mig, 
+         el_pm_intent_dom_mig = case_when(is.na(pm_intent_dom_mig) &
+                                             is.na(fu5_pm_intent_dom_mig) &
+                                             is.na(el_pm_dom_mig) ~ NA,
+                                .default = pmax(pm_intent_dom_mig,
+                                                fu5_pm_intent_dom_mig,
+                                                el_pm_dom_mig,
                                                 na.rm = T)),
-         el_pm_intent_border_cross = case_when(is.na(pm_intent_border_cross) & 
-                                           is.na(fu5_pm_intent_border_cross) ~ NA,
-                                .default = pmax(pm_intent_border_cross, 
-                                                fu5_pm_intent_border_cross, 
+         el_pm_intent_border_cross = case_when(is.na(pm_intent_border_cross) &
+                                           is.na(fu5_pm_intent_border_cross) &
+                                           is.na(el_pm_border_cross) ~ NA,
+                                .default = pmax(pm_intent_border_cross,
+                                                fu5_pm_intent_border_cross,
+                                                el_pm_border_cross,
                                                 na.rm = T)),
          el_pm_intent_border_cross_ecowas = case_when(is.na(pm_intent_border_cross_ecowas) &
-                                                  is.na(fu5_pm_intent_border_cross_ecowas) ~ NA,
-                                .default = pmax(pm_intent_border_cross_ecowas, 
-                                                fu5_pm_intent_border_cross_ecowas, 
+                                                  is.na(fu5_pm_intent_border_cross_ecowas) &
+                                                  is.na(el_pm_border_cross_ecowas) ~ NA,
+                                .default = pmax(pm_intent_border_cross_ecowas,
+                                                fu5_pm_intent_border_cross_ecowas,
+                                                el_pm_border_cross_ecowas,
                                                 na.rm = T)))  |>
   select(hh_id, el_pm_intent_mig_any, el_pm_intent_border_cross,
          el_pm_intent_border_cross_ecowas, el_pm_intent_dom_mig, pm_intent_dom_mig)
