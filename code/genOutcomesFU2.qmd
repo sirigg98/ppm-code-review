@@ -212,7 +212,7 @@ non_ec_mig <- pm_fu2 |>
          fu2_pm_border_cross_nonec_num = str_count(pm_countries, 
                                                    "\\b(?:2|4|5|8|11|12|20|21)\\b"),
          dum_ec = 1*(fu2_pm_border_cross_ecowas_num > 0),
-         fu2_pm_border_cross_nonec = 1*(fu2_pm_border_cross_nonec_num > 0)) |>
+         fu2_pm_border_cross_nonec = 1*(fu2_pm_border_cross_nonec_num)) |>
   select(hh_id, fu2_pm_border_cross_nonec)
 
 
@@ -526,20 +526,14 @@ temp_loc_share_df <- pm_fu2 |>
     cols = matches("pm_location_is_home_[0-9]|pm_share_income_[0-9]+|pm_share_income_amt_[0-9]+|pm_rec_income_[0-9]+|pm_rec_income_amt_[0-9]+|pm_location_period_lab_[0-9]+|pm_location_weeks_[0-9]+"),
     names_to = c(".value", "loc_ind"),
     names_pattern = "(.+)_([0-9]+)") |>
-  mutate(pm_share_income_amt = case_when(pm_share_income == 0 ~ 0,
-                                          .default = pm_share_income_amt),
-         pm_rec_income_amt = case_when(pm_rec_income == 0 ~ 0,
-                                        .default = pm_rec_income_amt),
-         pm_share_income_amt = pm_share_income_amt/pm_location_weeks,
-         pm_rec_income_amt = pm_rec_income_amt/pm_location_weeks) |>
   group_by(hh_id) |>
   summarize(fu2_pm_share_income = mean(pm_share_income_amt, na.rm = T),
             fu2_pm_rec_income = mean(pm_rec_income_amt, na.rm = T),
             tot_loc_weeks = sum(pm_location_weeks, na.rm = T)) |>
   mutate(fu2_pm_share_income = ifelse(is.na(fu2_pm_share_income), 0,
-                                      fu2_pm_share_income),
-         fu2_pm_rec_income = ifelse(is.na(fu2_pm_rec_income), 0,
-                                    fu2_pm_rec_income))
+                                      fu2_pm_share_income/tot_loc_weeks),
+         fu2_pm_rec_income = ifelse(is.na(fu2_pm_rec_income), 0, 
+                                    fu2_pm_rec_income/tot_loc_weeks))
 
 
 pm_fu2 <- left_join(pm_fu2, temp_loc_share_df, by = "hh_id")
@@ -608,10 +602,8 @@ pm_fu2 <- pm_fu2 |>
                               pm_disc_2,
                               pm_disc_3,
                               pm_disc_4, na.rm = T)) |>
-  ungroup() |>
-  mutate(across(c(pm_felt_unsafe, pm_phys_attacked, pm_theft, pm_disc),
-                ~ifelse(is.infinite(.), NA, .)))
-
+  ungroup()
+  
 addIndex("pm_fu2",
          c("pm_felt_unsafe",
            "pm_phys_attacked", 
@@ -762,22 +754,6 @@ summ(c("fu2_pm_famstress",
 ```{r}
 #| label: Gen-JointDecMake-Outcomes-PM
 
-# Cleaning outcome components ----
-pm_fu2 <- pm_fu2 |>
-  mutate_at(vars(pm_fam_discuss_work,
-                 pm_fam_discuss_community,
-                 pm_fam_discuss_election,
-                 pm_fam_discuss_invest,
-                 pm_fam_discuss_migrate),
-            ~./3)
-
-# Consults with family on issues other than migration (0-4) ----
-addIndex("pm_fu2",
-         c("pm_fam_discuss_work",
-           "pm_fam_discuss_community",
-           "pm_fam_discuss_election",
-           "pm_fam_discuss_invest"),
-         "fu2_pm_consult_nonmig")
 
 # Consults with family on migration ----
 addIndex("pm_fu2",
@@ -795,26 +771,17 @@ addIndex("pm_fu2",
 workfile <- workfile |>
   left_join(select(pm_fu2, hh_id,
                    fu2_pm_consult_mig,
-                   fu2_pm_consult_nonmig,
-                   c("pm_fam_discuss_work",
-                     "pm_fam_discuss_community",
-                     "pm_fam_discuss_election",
-                     "pm_fam_discuss_invest",
-                     "pm_fam_discuss_migrate",
+                   c("pm_fam_discuss_migrate",
                      "pm_discuss_mig",
-                     "pm_discuss_responsibilities")),
+                     "pm_discuss_responsibilities")), 
             by = "hh_id") |>
-  rename_at(vars(c("pm_fam_discuss_work",
-                     "pm_fam_discuss_community",
-                     "pm_fam_discuss_election",
-                     "pm_fam_discuss_invest",
-                     "pm_fam_discuss_migrate",
+  rename_at(vars(c("pm_fam_discuss_migrate",
                      "pm_discuss_mig",
                      "pm_discuss_responsibilities")),
             ~paste0("fu2_", .))
 
 # Summarize outcomes generated ----
-summ(c("fu2_pm_consult_mig", "fu2_pm_consult_nonmig"))
+summ(c("fu2_pm_consult_mig"))
 ```
 
 ### SHM
@@ -924,15 +891,6 @@ summ(c("fu2_shm_famstress",
 #            "shm_school_couple",
 #            "shm_discuss_women"),
 #          "fu2_shm_jointdec")
-
-# Cleaning outcome components ----
-shm_fu2 <- shm_fu2 |>
-  mutate_at(vars(shm_fam_discuss_work,
-                 shm_fam_discuss_community,
-                 shm_fam_discuss_election,
-                 shm_fam_discuss_invest,
-                 shm_fam_discuss_migrate),
-            ~./3)
 
 # Consults with family on issues other than migration (0-4) ----
 addIndex("shm_fu2",
@@ -1223,7 +1181,7 @@ temp_monthconscat_df <- hoh_fu2 |>
   filter(hoh_item != "") |>
   select(-item_number) |>
   pivot_wider(names_from = "hoh_item", values_from = "hoh_monthly_consumption_amt") |>
-  mutate_at(vars(matches("fu2_hh_monthcons")), ~case_when(is.na(.) ~ 0, .default = .))
+  mutate_at(vars(matches("fu2_hoh_monthcons")), ~case_when(is.na(.) ~ 0, .default = .))
 
 
 temp_weekconscat_df <- hoh_fu2 |>

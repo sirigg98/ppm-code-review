@@ -47,7 +47,7 @@ options(modelsummary_format_numeric_latex = "plain")
 
 # set implementation data folder ----
 if (Sys.getenv("LOGNAME") == "siriggurung") {
-  PD_directory  <- "/Users/siriggurung/Box Sync/PPM/prebaseline_april2021/data/Implementation Data"
+  PD_directory  <- "/Users/siriggurung/Library/CloudStorage/Box-Box/PPM/prebaseline_april2021/data/Implementation data"
 }
 
 # Load program data by commune, append data ----
@@ -207,10 +207,9 @@ final_df <- final_df |>
          impl_att_one_shm_diag = case_when(shm_dialogue1 == "Oui" | 
                                         shm_dialogue2 == "Oui" ~ 1,
                                       .default = 0),
-         impl_compliant = case_when(Eligible == "Yes" &
-                                     Z == "ppm" &
-                                     impl_rec_both_cash == 1 &
-                                     impl_rec_phone == 1 ~ 1,
+         impl_compliant = case_when(Eligible == "Yes" & 
+                                     Z == "ppm" & 
+                                     impl_rec_both_cash == 1 ~ 1, 
                                    impl_rec_both_cash == 1 & 
                                      impl_rec_phone == 1 &
                                      Z == "uct" ~ 1,
