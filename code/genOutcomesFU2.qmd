@@ -526,14 +526,20 @@ temp_loc_share_df <- pm_fu2 |>
     cols = matches("pm_location_is_home_[0-9]|pm_share_income_[0-9]+|pm_share_income_amt_[0-9]+|pm_rec_income_[0-9]+|pm_rec_income_amt_[0-9]+|pm_location_period_lab_[0-9]+|pm_location_weeks_[0-9]+"),
     names_to = c(".value", "loc_ind"),
     names_pattern = "(.+)_([0-9]+)") |>
+  mutate(pm_share_income_amt = case_when(pm_share_income == 0 ~ 0,
+                                          .default = pm_share_income_amt),
+         pm_rec_income_amt = case_when(pm_rec_income == 0 ~ 0,
+                                        .default = pm_rec_income_amt),
+         pm_share_income_amt = pm_share_income_amt/pm_location_weeks,
+         pm_rec_income_amt = pm_rec_income_amt/pm_location_weeks) |>
   group_by(hh_id) |>
   summarize(fu2_pm_share_income = mean(pm_share_income_amt, na.rm = T),
             fu2_pm_rec_income = mean(pm_rec_income_amt, na.rm = T),
             tot_loc_weeks = sum(pm_location_weeks, na.rm = T)) |>
   mutate(fu2_pm_share_income = ifelse(is.na(fu2_pm_share_income), 0,
-                                      fu2_pm_share_income/tot_loc_weeks),
-         fu2_pm_rec_income = ifelse(is.na(fu2_pm_rec_income), 0, 
-                                    fu2_pm_rec_income/tot_loc_weeks))
+                                      fu2_pm_share_income),
+         fu2_pm_rec_income = ifelse(is.na(fu2_pm_rec_income), 0,
+                                    fu2_pm_rec_income))
 
 
 pm_fu2 <- left_join(pm_fu2, temp_loc_share_df, by = "hh_id")

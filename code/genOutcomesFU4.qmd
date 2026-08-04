@@ -599,10 +599,13 @@ temp_loc_share_df <- pm_fu4 |>
     names_to = c(".value", "loc_ind"),
     names_pattern = "(.+)_([0-9]+)") |>
   filter(pm_location_period_lab == "from our most recent survey in person to now") |>
+  mutate(pm_share_income_amt = case_when(pm_share_income == 0 ~ 0,
+                                          .default = pm_share_income_amt),
+         pm_share_income_amt = pm_share_income_amt/pm_location_weeks) |>
   group_by(hh_id) |>
   summarize(fu4_pm_share_income = mean(pm_share_income_amt, na.rm = T),
             tot_locs_weeks = sum(pm_location_weeks, na.rm = T)) |>
-  mutate(fu4_pm_share_income = ifelse(is.na(fu4_pm_share_income), 0, fu4_pm_share_income/tot_locs_weeks))
+  mutate(fu4_pm_share_income = ifelse(is.na(fu4_pm_share_income), 0, fu4_pm_share_income))
 
 
 pm_fu4 <- pm_fu4 |>

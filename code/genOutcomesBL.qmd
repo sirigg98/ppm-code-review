@@ -705,14 +705,20 @@ addIndex("pm_bl",
 
 # Income shared with HH ----
 temp_share_df <- pm_locacts_bl |>
-  group_by(hh_id) |> 
+  mutate(share_income_amt = case_when(share_income == 0 ~ 0,
+                                       .default = share_income_amt),
+         rec_income_amt = case_when(rec_income == 0 ~ 0,
+                                     .default = rec_income_amt),
+         share_income_amt = share_income_amt/location_weeks,
+         rec_income_amt = rec_income_amt/location_weeks) |>
+  group_by(hh_id) |>
   summarize(bl_pm_share_income = mean(share_income_amt, na.rm = T),
             bl_pm_rec_income = mean(rec_income_amt, na.rm = T),
             tot_locs_weeks = sum(location_weeks, na.rm = T)) |>
-  mutate(bl_pm_share_income = ifelse(is.na(bl_pm_share_income), 
-                                     0, bl_pm_share_income/tot_locs_weeks),
-         bl_pm_rec_income = ifelse(is.na(bl_pm_rec_income), 
-                                     0, bl_pm_rec_income/tot_locs_weeks))
+  mutate(bl_pm_share_income = ifelse(is.na(bl_pm_share_income),
+                                     0, bl_pm_share_income),
+         bl_pm_rec_income = ifelse(is.na(bl_pm_rec_income),
+                                     0, bl_pm_rec_income))
 
 pm_bl <- pm_bl |>
   left_join(temp_share_df, by = "hh_id") |>
