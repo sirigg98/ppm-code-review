@@ -1529,7 +1529,7 @@ hh_size <- hoh_roster_bl |>
   summarize(bl_hh_members_above18 = sum(above18, na.rm = T),
             bl_hh_members_below18 = sum(below18, na.rm = T),
             bl_hh_members_above15 = sum(above15, na.rm = T),
-            bl_hh_members_below15 = sum(below18, na.rm = T),
+            bl_hh_members_below15 = sum(below15, na.rm = T),
             bl_hh_members_1840 = sum(between1840, na.rm = T),
             bl_hh_men_1550 = sum(men1550, na.rm = T),
             bl_hh_members_427 = sum(between427, na.rm = T),
