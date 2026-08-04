@@ -96,12 +96,6 @@ hoh_el <- read.csv(path.expand("~/Box Sync/PPM/rctendline_june2025/data/out/Endl
 #   filter(resp_available == 1) |>
 #   distinct(hh_id, .keep_all = T)
 
-
-# Woman
-w_el <- read.csv(here("data/out/fu5/Follow-up Round 5 Woman De-ID.csv")) |>
-  filter(resp_available == 1) |>
-  distinct(hh_id, .keep_all = T)
-
 ```
 
 ```{r}
