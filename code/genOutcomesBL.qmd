@@ -368,7 +368,7 @@ pm_bl <- pm_bl |>
   ) |>
   mutate(
     bl_pm_border_cross_nonec = 1 *
-      (str_count(countries, "\\b(?:2|4|5|8|11|12|20|21)\\b"))
+      (str_count(countries, "\\b(?:2|4|5|8|11|12|20|21)\\b") > 0)
   )
 
 # Numbers of episodes ----

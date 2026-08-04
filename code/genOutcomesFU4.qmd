@@ -227,9 +227,9 @@ pm_fu4 <- pm_fu4 |>
                                   pm_previous_in_niger_3 == 1 ~ 1,
                                 .default = 0),
          pm_border_cross_nonec = 1*(str_count(pm_countries_new,
-                                              "\\b(?:2|4|5|8|11|12|20|21)\\b"))) |>
+                                              "\\b(?:2|4|5|8|11|12|20|21)\\b") > 0)) |>
   rowwise() |>
-  mutate(pm_mig_any = pmax(pm_dom_mig, pm_border_cross, 
+  mutate(pm_mig_any = pmax(pm_dom_mig, pm_border_cross,
                            pm_border_cross_ecowas, na.rm = T)) |>
   ungroup()
 
