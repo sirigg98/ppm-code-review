@@ -420,8 +420,8 @@ mig_df <- pm_locacts_bl |>
   ) |>
   group_by(hh_id) |>
   summarize(
-    bl_pm_mig_any_num = sum(dom_mig, na.rm = T),
-    bl_pm_dom_mig_num = sum(mig_any, na.rm = T),
+    bl_pm_mig_any_num = sum(mig_any, na.rm = T),
+    bl_pm_dom_mig_num = sum(dom_mig, na.rm = T),
     bl_pm_border_cross_ecowas_num = sum(ecowas, na.rm = T),
     bl_pm_border_cross_nga_num = sum(nga, na.rm = T),
     bl_pm_border_cross_civ_num = sum(civ, na.rm = T),
