@@ -756,6 +756,9 @@ summ(c("fu2_pm_famstress",
 ```{r}
 #| label: Gen-JointDecMake-Outcomes-PM
 
+# Cleaning outcome components ----
+pm_fu2 <- pm_fu2 |>
+  mutate_at(vars(pm_fam_discuss_migrate), ~./3)
 
 # Consults with family on migration ----
 addIndex("pm_fu2",
@@ -893,6 +896,15 @@ summ(c("fu2_shm_famstress",
 #            "shm_school_couple",
 #            "shm_discuss_women"),
 #          "fu2_shm_jointdec")
+
+# Cleaning outcome components ----
+shm_fu2 <- shm_fu2 |>
+  mutate_at(vars(shm_fam_discuss_work,
+                 shm_fam_discuss_community,
+                 shm_fam_discuss_election,
+                 shm_fam_discuss_invest,
+                 shm_fam_discuss_migrate),
+            ~./3)
 
 # Consults with family on issues other than migration (0-4) ----
 addIndex("shm_fu2",
