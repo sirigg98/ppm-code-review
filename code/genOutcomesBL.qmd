@@ -1907,14 +1907,12 @@ hoh_bl <- hoh_bl |>
   #                income_gifts,
   #                earn_interest,
   #                biz_income), ~./hh_size_total)  |>
-  mutate(livestock_paid = 
-           paid_livestock_wage * paid_livestock_days) |>
   left_join(temp_livestock_df, by = "hh_id") |>
   mutate(Y = case_when(is.na(Y) ~ 0,
                        .default = Y)) |>
   mutate_at(vars("livestock_paid",
            "livestock_expend",
-           "hire_livestock_total", 
+           "hire_livestock_total",
            "total_income",
            "A1", "rent_land_amt"), ~ifelse(is.na(.), 0, .))
 
@@ -1929,9 +1927,8 @@ addIndex("hoh_bl",
 # Livestock income (CFA) ----
 
 temp_livestock_val_df <- hoh_livestock_bl |>
-  mutate(C = livestock_own * livestock_value) |>
   group_by(hh_id) |>
-  summarize(C = sum(C, na.rm = T))
+  summarize(C = sum(livestock_value, na.rm = T))
 
 hoh_bl <- hoh_bl |>
   left_join(temp_livestock_val_df, by = "hh_id")
