@@ -2869,22 +2869,32 @@ summ(c("el_shm_know_mig_reqs"))
 ```{r}
 #| label: Gen-TimeUse-Outcomes-HoH
 
+### Disabled in EL
+## Time-use depends on the hoh_paid_name_*/hoh_paid_ag_*/
+## hoh_ag_days_member_*/hoh_labor_name_* repeat modules (paid-labor
+## and ag-days-worked rosters). Those modules were dropped from the
+## endline Household Head instrument entirely (0 columns in the EL
+## data vs 24-28 in FU3/FU5), so this outcome cannot be computed at
+## EL. (The `hoh_el_id` references below were also a stray typo for
+## `hoh_el` -- left as `hoh_el` for clarity even though the block
+## can't run, so this doesn't read as an unrelated bug.)
+
 # Converting roster module to long format ----
 
 # getting names, age and sex from HH roster module
-# roster_age <- hoh_el_id |>
+# roster_age <- hoh_el |>
 #   select(hh_id, matches("hoh_roster_age_[0-9]+$")) |>
 #   pivot_longer(!hh_id, names_to = "index",
 #                values_to = "age",
 #                names_pattern = "hoh_roster_age_([0-9]+)$")
-# 
-# roster_sex <- hoh_el_id |>
+#
+# roster_sex <- hoh_el |>
 #   select(hh_id, matches("hoh_roster_sex_[0-9]+$")) |>
 #   pivot_longer(!hh_id, names_to = "index",
 #                values_to = "sex",
 #                names_pattern = "hoh_roster_sex_([0-9]+)$")
-# 
-# roster_names <- hoh_el_id |>
+#
+# roster_names <- hoh_el |>
 #   select(hh_id, matches("hoh_roster_name_[0-9]+$")) |>
 #   pivot_longer(!hh_id, names_to = "index",
 #                values_to = "name",
@@ -2892,11 +2902,11 @@ summ(c("el_shm_know_mig_reqs"))
 
 
 # Getting paid_ag and names for hoh_hh_paid module ----
-# roster_paid_ag_names <- hoh_el_id |>
+# roster_paid_ag_names <- hoh_el |>
 #   select(hh_id, matches("hoh_paid_name_[0-9]+$")) |>
 #   pivot_longer(!hh_id, names_to = "index",
 #                values_to = "name",
-#                names_pattern = "hoh_paid_name_([0-9]+)$") 
+#                names_pattern = "hoh_paid_name_([0-9]+)$")
 
 # roster_paid_ag <- hoh_el |>
 #   select(hh_id, matches("hoh_paid_ag_[0-9]+$")) |>
