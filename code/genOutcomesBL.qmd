@@ -828,7 +828,7 @@ addIndex("pm_bl",
          "bl_pm_harrasment")  
   
 
-# Physical health (1-23) ----
+# Physical health (1-4) ----
 addIndex("pm_bl",
          c("illness_limit",
            "sleep", 
@@ -2982,13 +2982,13 @@ w_bl <- w_bl |>
                                      NA),
          bl_w_domabuse = ifelse(woman_married == 0, NA, 
                                      bl_w_domabuse),
-         bl_w_jointdec = ifelse(!is.na(daily_hh_expenses_couple) | 
-                                  !is.na(hh_purchases_couple) | 
-                                  !is.na(fam_plan_couple) | 
-                                  !is.na(migrate_couple) | 
+         bl_w_jointdec = ifelse((!is.na(daily_hh_expenses_couple) |
+                                  !is.na(hh_purchases_couple) |
+                                  !is.na(fam_plan_couple) |
+                                  !is.na(migrate_couple) |
                                   !is.na(vote_couple) |
-                                  !is.na(school_couple) | 
-                                  !is.na(discuss_women) & 
+                                  !is.na(school_couple) |
+                                  !is.na(discuss_women)) &
                                        woman_married == 1, bl_w_jointdec, NA),
          bl_w_affection = ifelse((!is.na(affectionate) |
                                        !is.na(respectful)) & 

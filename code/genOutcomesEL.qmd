@@ -585,7 +585,7 @@ rm(temp_df)
 #| label: Gen-Failed-Mig-Outcomes-PM
 
 # Cleaning outcome components ----
-pm_fu4 <- pm_el |>
+pm_el <- pm_el |>
   mutate_at(vars(pm_failed_prep),
             ~case_when(. < 0 ~ NA,
                        .default = .))
@@ -1716,12 +1716,11 @@ mig_df_fu3 <- hh_mig(hoh_fu3) |>
 mig_df_fu4 <- hh_mig(hoh_fu4) |>
   mutate(survey_wave = "fu4")
 
-# SG: this breaks for the same reason as genOutcomesFU5
 mig_df_fu5 <- hh_mig(hoh_fu5) |>
-  mutate(survey_wave = "fu4")
+  mutate(survey_wave = "fu5")
 
 mig_df <- hh_mig(hoh_el) |>
-  mutate(survey_wave = "fu5") |>
+  mutate(survey_wave = "el") |>
   bind_rows(mig_df_fu3) |>
   bind_rows(mig_df_fu4) |>
   bind_rows(mig_df_fu5) |>
@@ -1848,7 +1847,7 @@ mig_df_fu5 <- hh_failed_mig(hoh_fu5) |>
   mutate(mem_ind = as.character(mem_ind))
 
 mig_df <- hh_failed_mig(hoh_el) |>
-  mutate(survey_wave = "fu5") |>
+  mutate(survey_wave = "el") |>
   bind_rows(mig_df_fu3) |>
   bind_rows(mig_df_fu4) |>
   bind_rows(mig_df_fu5) |>
@@ -1967,7 +1966,7 @@ temp_monthconscat_df <- hoh_el |>
   filter(hoh_item != "") |>
   select(-item_number) |>
   pivot_wider(names_from = "hoh_item", values_from = "hoh_monthly_consumption_amt") |>
-  mutate_at(vars(matches("el_hoh_monthcons")), ~case_when(is.na(.) ~ 0, .default = .))
+  mutate_at(vars(matches("el_hh_monthcons")), ~case_when(is.na(.) ~ 0, .default = .))
 
 
 temp_weekconscat_df <- hoh_el |>
