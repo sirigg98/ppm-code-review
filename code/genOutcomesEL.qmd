@@ -945,8 +945,10 @@ temp_loc_harras_df <- pm_el |>
   summarize(pm_felt_unsafe = max(pm_felt_unsafe, na.rm = T),
             pm_phys_attacked = max(pm_phys_attacked, na.rm = T),
             pm_theft = max(pm_theft, na.rm = T),
-            pm_disc = max(pm_disc, na.rm = T))
-  
+            pm_disc = max(pm_disc, na.rm = T)) |>
+  mutate(across(c(pm_felt_unsafe, pm_phys_attacked, pm_theft, pm_disc),
+                ~ifelse(is.infinite(.), NA, .)))
+
 pm_el <- pm_el |>
   left_join(temp_loc_harras_df, by = "hh_id")
 rm(temp_loc_harras_df)
@@ -970,6 +972,7 @@ temp_ill_df <- pm_el |>
     names_to = c(".value", "loc_ind"),
     names_pattern = "(.+)_([0-9]+)") |>
   filter(pm_location_period_lab == "From follow up 5 (December 2024) to endline (June 2025)") |>
+  filter(!is.na(pm_illness)) |>
   group_by(hh_id) |>
   summarize(pm_illness = max(pm_illness, na.rm = T))
 
