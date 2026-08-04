@@ -368,7 +368,7 @@ pm_bl <- pm_bl |>
   ) |>
   mutate(
     bl_pm_border_cross_nonec = 1 *
-      (str_count(countries, "\\b(?:2|4|5|8|11|12|20|21)\\b"))
+      (str_count(countries, "\\b(?:2|4|5|8|11|12|20|21)\\b") > 0)
   )
 
 # Numbers of episodes ----
@@ -420,8 +420,8 @@ mig_df <- pm_locacts_bl |>
   ) |>
   group_by(hh_id) |>
   summarize(
-    bl_pm_mig_any_num = sum(dom_mig, na.rm = T),
-    bl_pm_dom_mig_num = sum(mig_any, na.rm = T),
+    bl_pm_mig_any_num = sum(mig_any, na.rm = T),
+    bl_pm_dom_mig_num = sum(dom_mig, na.rm = T),
     bl_pm_border_cross_ecowas_num = sum(ecowas, na.rm = T),
     bl_pm_border_cross_nga_num = sum(nga, na.rm = T),
     bl_pm_border_cross_civ_num = sum(civ, na.rm = T),
@@ -705,14 +705,20 @@ addIndex("pm_bl",
 
 # Income shared with HH ----
 temp_share_df <- pm_locacts_bl |>
-  group_by(hh_id) |> 
+  mutate(share_income_amt = case_when(share_income == 0 ~ 0,
+                                       .default = share_income_amt),
+         rec_income_amt = case_when(rec_income == 0 ~ 0,
+                                     .default = rec_income_amt),
+         share_income_amt = share_income_amt/location_weeks,
+         rec_income_amt = rec_income_amt/location_weeks) |>
+  group_by(hh_id) |>
   summarize(bl_pm_share_income = mean(share_income_amt, na.rm = T),
             bl_pm_rec_income = mean(rec_income_amt, na.rm = T),
             tot_locs_weeks = sum(location_weeks, na.rm = T)) |>
-  mutate(bl_pm_share_income = ifelse(is.na(bl_pm_share_income), 
-                                     0, bl_pm_share_income/tot_locs_weeks),
-         bl_pm_rec_income = ifelse(is.na(bl_pm_rec_income), 
-                                     0, bl_pm_rec_income/tot_locs_weeks))
+  mutate(bl_pm_share_income = ifelse(is.na(bl_pm_share_income),
+                                     0, bl_pm_share_income),
+         bl_pm_rec_income = ifelse(is.na(bl_pm_rec_income),
+                                     0, bl_pm_rec_income))
 
 pm_bl <- pm_bl |>
   left_join(temp_share_df, by = "hh_id") |>
@@ -809,7 +815,8 @@ temp_safety_health_df <- pm_locacts_bl |>
             theft = max(theft, na.rm = T),
             disc = max(disc, na.rm = T),
             illness = max(illness, na.rm = T)) |>
-  filter(!is.infinite(felt_unsafe))
+  mutate(across(c(felt_unsafe, phys_attacked, theft, disc, illness),
+                ~ifelse(is.infinite(.), NA, .)))
 
 pm_bl <- pm_bl |>
   mutate_at(vars(illness_limit, 
@@ -827,7 +834,7 @@ addIndex("pm_bl",
          "bl_pm_harrasment")  
   
 
-# Physical health (1-23) ----
+# Physical health (1-4) ----
 addIndex("pm_bl",
          c("illness_limit",
            "sleep", 
@@ -1171,9 +1178,9 @@ addIndex("pm_bl",
 # Cosmopolitan index (0-2) ----
 pm_bl <- pm_bl |>
   mutate(constrain_customs = as.numeric(constrain_customs),
-         constrain_customs = (constrain_customs-1)/2,
+         constrain_customs = 1L*(constrain_customs == 1),
          free_move = as.numeric(free_move),
-         free_move = (free_move-1)/3)
+         free_move = (4 - free_move)/3)
 
 addIndex("pm_bl",
          c("constrain_customs",
@@ -1528,7 +1535,7 @@ hh_size <- hoh_roster_bl |>
   summarize(bl_hh_members_above18 = sum(above18, na.rm = T),
             bl_hh_members_below18 = sum(below18, na.rm = T),
             bl_hh_members_above15 = sum(above15, na.rm = T),
-            bl_hh_members_below15 = sum(below18, na.rm = T),
+            bl_hh_members_below15 = sum(below15, na.rm = T),
             bl_hh_members_1840 = sum(between1840, na.rm = T),
             bl_hh_men_1550 = sum(men1550, na.rm = T),
             bl_hh_members_427 = sum(between427, na.rm = T),
@@ -1906,14 +1913,12 @@ hoh_bl <- hoh_bl |>
   #                income_gifts,
   #                earn_interest,
   #                biz_income), ~./hh_size_total)  |>
-  mutate(livestock_paid = 
-           paid_livestock_wage * paid_livestock_days) |>
   left_join(temp_livestock_df, by = "hh_id") |>
   mutate(Y = case_when(is.na(Y) ~ 0,
                        .default = Y)) |>
   mutate_at(vars("livestock_paid",
            "livestock_expend",
-           "hire_livestock_total", 
+           "hire_livestock_total",
            "total_income",
            "A1", "rent_land_amt"), ~ifelse(is.na(.), 0, .))
 
@@ -1928,9 +1933,8 @@ addIndex("hoh_bl",
 # Livestock income (CFA) ----
 
 temp_livestock_val_df <- hoh_livestock_bl |>
-  mutate(C = livestock_own * livestock_value) |>
   group_by(hh_id) |>
-  summarize(C = sum(C, na.rm = T))
+  summarize(C = sum(livestock_value, na.rm = T))
 
 hoh_bl <- hoh_bl |>
   left_join(temp_livestock_val_df, by = "hh_id")
@@ -2984,13 +2988,13 @@ w_bl <- w_bl |>
                                      NA),
          bl_w_domabuse = ifelse(woman_married == 0, NA, 
                                      bl_w_domabuse),
-         bl_w_jointdec = ifelse(!is.na(daily_hh_expenses_couple) | 
-                                  !is.na(hh_purchases_couple) | 
-                                  !is.na(fam_plan_couple) | 
-                                  !is.na(migrate_couple) | 
+         bl_w_jointdec = ifelse((!is.na(daily_hh_expenses_couple) |
+                                  !is.na(hh_purchases_couple) |
+                                  !is.na(fam_plan_couple) |
+                                  !is.na(migrate_couple) |
                                   !is.na(vote_couple) |
-                                  !is.na(school_couple) | 
-                                  !is.na(discuss_women) & 
+                                  !is.na(school_couple) |
+                                  !is.na(discuss_women)) &
                                        woman_married == 1, bl_w_jointdec, NA),
          bl_w_affection = ifelse((!is.na(affectionate) |
                                        !is.na(respectful)) & 

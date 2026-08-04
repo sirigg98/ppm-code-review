@@ -563,7 +563,7 @@ rm(temp_df)
 #| label: Gen-Failed-Mig-Outcomes-PM
 
 # Cleaning outcome components ----
-pm_fu4 <- pm_fu5 |>
+pm_fu5 <- pm_fu5 |>
   mutate_at(vars(pm_failed_prep),
             ~case_when(. < 0 ~ NA,
                        .default = .))
@@ -663,29 +663,40 @@ pm_fu5_temp <- pm_fu5 |>
          pm_intent_mig_any = 1*(pm_intent_dom_mig == 1 | 
                                       pm_intent_border_cross == 1 |
                                       pm_intent_border_cross_ecowas == 1)) |>
-  right_join(select(pm_workfile_fu4, 
-                    matches("fu4_pm_intent_"), 
-                    hh_id), 
+  right_join(select(pm_workfile_fu4,
+                    matches("fu4_pm_intent_"),
+                    hh_id),
              by = "hh_id") |>
-  mutate(fu5_pm_intent_mig_any = case_when(is.na(pm_intent_mig_any) & 
-                                             is.na(fu4_pm_intent_mig_any) ~ NA,
-                                .default = pmax(pm_intent_mig_any, 
-                                                fu4_pm_intent_mig_any, 
+  left_join(select(workfile, hh_id, fu5_pm_mig_any, fu5_pm_dom_mig,
+                   fu5_pm_border_cross, fu5_pm_border_cross_ecowas),
+            by = "hh_id") |>
+  mutate(fu5_pm_intent_mig_any = case_when(is.na(pm_intent_mig_any) &
+                                             is.na(fu4_pm_intent_mig_any) &
+                                             is.na(fu5_pm_mig_any) ~ NA,
+                                .default = pmax(pm_intent_mig_any,
+                                                fu4_pm_intent_mig_any,
+                                                fu5_pm_mig_any,
                                                 na.rm = T)),
-         fu5_pm_intent_dom_mig = case_when(is.na(pm_intent_dom_mig) & 
-                                             is.na(fu4_pm_intent_dom_mig) ~ NA,
-                                .default = pmax(pm_intent_dom_mig, 
-                                                fu4_pm_intent_dom_mig, 
+         fu5_pm_intent_dom_mig = case_when(is.na(pm_intent_dom_mig) &
+                                             is.na(fu4_pm_intent_dom_mig) &
+                                             is.na(fu5_pm_dom_mig) ~ NA,
+                                .default = pmax(pm_intent_dom_mig,
+                                                fu4_pm_intent_dom_mig,
+                                                fu5_pm_dom_mig,
                                                 na.rm = T)),
-         fu5_pm_intent_border_cross = case_when(is.na(pm_intent_border_cross) & 
-                                           is.na(fu4_pm_intent_border_cross) ~ NA,
-                                .default = pmax(pm_intent_border_cross, 
-                                                fu4_pm_intent_border_cross, 
+         fu5_pm_intent_border_cross = case_when(is.na(pm_intent_border_cross) &
+                                           is.na(fu4_pm_intent_border_cross) &
+                                           is.na(fu5_pm_border_cross) ~ NA,
+                                .default = pmax(pm_intent_border_cross,
+                                                fu4_pm_intent_border_cross,
+                                                fu5_pm_border_cross,
                                                 na.rm = T)),
          fu5_pm_intent_border_cross_ecowas = case_when(is.na(pm_intent_border_cross_ecowas) &
-                                                  is.na(fu4_pm_intent_border_cross_ecowas) ~ NA,
-                                .default = pmax(pm_intent_border_cross_ecowas, 
-                                                fu4_pm_intent_border_cross_ecowas, 
+                                                  is.na(fu4_pm_intent_border_cross_ecowas) &
+                                                  is.na(fu5_pm_border_cross_ecowas) ~ NA,
+                                .default = pmax(pm_intent_border_cross_ecowas,
+                                                fu4_pm_intent_border_cross_ecowas,
+                                                fu5_pm_border_cross_ecowas,
                                                 na.rm = T)))  |>
   select(hh_id, fu5_pm_intent_mig_any, fu5_pm_intent_border_cross,
          fu5_pm_intent_border_cross_ecowas, fu5_pm_intent_dom_mig, pm_intent_dom_mig)
@@ -722,9 +733,9 @@ rm(pm_fu5_temp)
 
 # Cleaning outcome components ----
 temp_loc_costs_df <- pm_fu5 |>
-  select(hh_id, matches("pm_food_cost_[0-9]+|pm_housing_cost_[0-9]+|pm_phone_cost_[0-9]+|pm_leisure_cost_[0-9]+|pm_transportation_cost_[0-9]+|pm_location_period_lab_[0-9]+|pm_location_weeks_[0-9]+")) |>
+  select(hh_id, matches("pm_food_cost_[0-9]+|pm_housing_cost_[0-9]+|pm_phone_cost_[0-9]+|pm_leisure_cost_[0-9]+|pm_transportation_cost_[0-9]+|pm_calc_total_income_[0-9]+|pm_calc_other_income_[0-9]+|pm_location_period_lab_[0-9]+|pm_location_weeks_[0-9]+")) |>
   pivot_longer(
-    cols = matches("pm_food_cost_[0-9]+|pm_housing_cost_[0-9]+|pm_phone_cost_[0-9]+|pm_leisure_cost_[0-9]+|pm_transportation_cost_[0-9]+|pm_location_period_lab_[0-9]+|pm_location_weeks_[0-9]+"),
+    cols = matches("pm_food_cost_[0-9]+|pm_housing_cost_[0-9]+|pm_phone_cost_[0-9]+|pm_leisure_cost_[0-9]+|pm_transportation_cost_[0-9]+|pm_calc_total_income_[0-9]+|pm_calc_other_income_[0-9]+|pm_location_period_lab_[0-9]+|pm_location_weeks_[0-9]+"),
     names_to = c(".value", "loc_ind"),
     names_pattern = "(.+)_([0-9]+)") |>
   filter(pm_location_period_lab == "From our most recent phone survey (September 2024) to now") |>
@@ -733,7 +744,9 @@ temp_loc_costs_df <- pm_fu5 |>
             fu5_pm_housing_cost = sum(pm_housing_cost, na.rm = T),
             fu5_pm_phone_cost = sum(pm_phone_cost, na.rm = T),
             fu5_pm_leisure_cost = sum(pm_leisure_cost, na.rm = T),
-            fu5_pm_transportation_cost = sum(pm_leisure_cost),
+            fu5_pm_transportation_cost = sum(pm_transportation_cost, na.rm = T),
+            fu5_pm_calc_total_income = sum(pm_calc_total_income, na.rm = T),
+            fu5_pm_calc_other_income = sum(pm_calc_other_income, na.rm = T),
             tot_loc_weeks = sum(pm_location_weeks, na.rm = T))
   
   
@@ -751,30 +764,21 @@ rm(temp_loc_costs_df)
 
 # Income (CFA) ----
 addIndex("pm_fu5",
-         c(getVarnames(pm_fu5, "pm_calc_total_income_"),
-           getVarnames(pm_fu5, "pm_calc_other_income_")),
+         c("fu5_pm_calc_total_income",
+           "fu5_pm_calc_other_income"),
          "fu5_pm_inc")
 
 pm_fu5 <- pm_fu5 |>
   mutate(fu5_pm_inc = fu5_pm_inc/tot_loc_weeks)
 
 # Savings (CFA) ----
-temp_savings_df <- pm_fu5 |>
-  select(hh_id, matches("pm_savings_type_amt_[0-9]+|pm_location_period_lab_[0-9]+")) |>
-  pivot_longer(
-    cols = matches("pm_savings_type_amt_[0-9]+|pm_location_period_lab_[0-9]+"),
-    names_to = c(".value", "loc_ind"),
-    names_pattern = "(.+)_([0-9]+)") |>
-  filter(pm_location_period_lab == "From our most recent phone survey (September 2024) to now") |>
-  group_by(hh_id) |>
-  summarize(fu5_pm_savings = sum(pm_savings_type_amt, na.rm = T))
-
 pm_fu5 <- pm_fu5 |>
-  left_join(temp_savings_df, by = "hh_id") |>
+  rowwise() |>
+  mutate(fu5_pm_savings = sum(c_across(matches("^pm_savings_type_amt_[0-9]+$")), na.rm = T)) |>
+  ungroup() |>
   mutate(fu5_pm_savings = ifelse(pm_separate_savings == 0, 0, fu5_pm_savings),
          fu5_pm_total_loan_value = -pm_total_loan_value)
 
-pm_fu5 |> select(pm_separate_savings, fu5_pm_savings, fu5_pm_total_loan_value)
 addIndex("pm_fu5",
          c("fu5_pm_savings",
            "pm_total_loan_value"),
@@ -819,7 +823,11 @@ temp_loc_share_df <- pm_fu5 |>
     names_to = c(".value", "loc_ind"),
     names_pattern = "(.+)_([0-9]+)") |>
   filter(pm_location_period_lab == "From our most recent phone survey (September 2024) to now") |>
-  mutate(pm_share_income_amt = pm_share_income_amt/pm_location_weeks,
+  mutate(pm_share_income_amt = case_when(pm_share_income == 0 ~ 0,
+                                          .default = pm_share_income_amt),
+         pm_rec_income_amt = case_when(pm_rec_income == 0 ~ 0,
+                                        .default = pm_rec_income_amt),
+         pm_share_income_amt = pm_share_income_amt/pm_location_weeks,
          pm_rec_income_amt = pm_rec_income_amt/pm_location_weeks) |>
   group_by(hh_id) |>
   summarize(fu5_pm_share_income = mean(pm_share_income_amt, na.rm = T),
@@ -887,8 +895,10 @@ temp_loc_harras_df <- pm_fu5 |>
   summarize(pm_felt_unsafe = max(pm_felt_unsafe, na.rm = T),
             pm_phys_attacked = max(pm_phys_attacked, na.rm = T),
             pm_theft = max(pm_theft, na.rm = T),
-            pm_disc = max(pm_disc, na.rm = T))
-  
+            pm_disc = max(pm_disc, na.rm = T)) |>
+  mutate(across(c(pm_felt_unsafe, pm_phys_attacked, pm_theft, pm_disc),
+                ~ifelse(is.infinite(.), NA, .)))
+
 pm_fu5 <- pm_fu5 |>
   left_join(temp_loc_harras_df, by = "hh_id")
 rm(temp_loc_harras_df)
@@ -912,6 +922,7 @@ temp_ill_df <- pm_fu5 |>
     names_to = c(".value", "loc_ind"),
     names_pattern = "(.+)_([0-9]+)") |>
   filter(pm_location_period_lab == "From our most recent phone survey (September 2024) to now") |>
+  filter(!is.na(pm_illness)) |>
   group_by(hh_id) |>
   summarize(pm_illness = max(pm_illness, na.rm = T))
 
@@ -1839,7 +1850,7 @@ temp_monthconscat_df <- hoh_fu5 |>
   filter(hoh_item != "") |>
   select(-item_number) |>
   pivot_wider(names_from = "hoh_item", values_from = "hoh_monthly_consumption_amt") |>
-  mutate_at(vars(matches("fu5_hoh_monthcons")), ~case_when(is.na(.) ~ 0, .default = .))
+  mutate_at(vars(matches("fu5_hh_monthcons")), ~case_when(is.na(.) ~ 0, .default = .))
 
 
 temp_weekconscat_df <- hoh_fu5 |>
