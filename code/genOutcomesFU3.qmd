@@ -2997,6 +2997,7 @@ w_fu3 <- w_fu3 |>
                  w_fam_plan_couple,
                  w_migrate_couple,
                  w_vote_couple,
+                 w_school_couple,
                  w_male_education_priority), ~(5-.)/4) |>
   mutate_at(vars(w_equal_rights_inheritance, 
                  w_woman_reject_marriage,
