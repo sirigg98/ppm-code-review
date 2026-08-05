@@ -96,12 +96,6 @@ hoh_el <- read.csv(path.expand("~/Box Sync/PPM/rctendline_june2025/data/out/Endl
 #   filter(resp_available == 1) |>
 #   distinct(hh_id, .keep_all = T)
 
-
-# Woman
-w_el <- read.csv(here("data/out/fu5/Follow-up Round 5 Woman De-ID.csv")) |>
-  filter(resp_available == 1) |>
-  distinct(hh_id, .keep_all = T)
-
 ```
 
 ```{r}
@@ -750,9 +744,9 @@ rm(pm_el_temp)
 
 # Cleaning outcome components ----
 temp_loc_costs_df <- pm_el |>
-  select(hh_id, matches("pm_food_cost_[0-9]+|pm_housing_cost_[0-9]+|pm_phone_cost_[0-9]+|pm_leisure_cost_[0-9]+|pm_transportation_cost_[0-9]+|pm_location_period_lab_[0-9]+|pm_location_weeks_[0-9]+")) |>
+  select(hh_id, matches("pm_food_cost_[0-9]+|pm_housing_cost_[0-9]+|pm_phone_cost_[0-9]+|pm_leisure_cost_[0-9]+|pm_transportation_cost_[0-9]+|pm_calc_total_income_[0-9]+|pm_calc_other_income_[0-9]+|pm_location_period_lab_[0-9]+|pm_location_weeks_[0-9]+")) |>
   pivot_longer(
-    cols = matches("pm_food_cost_[0-9]+|pm_housing_cost_[0-9]+|pm_phone_cost_[0-9]+|pm_leisure_cost_[0-9]+|pm_transportation_cost_[0-9]+|pm_location_period_lab_[0-9]+|pm_location_weeks_[0-9]+"),
+    cols = matches("pm_food_cost_[0-9]+|pm_housing_cost_[0-9]+|pm_phone_cost_[0-9]+|pm_leisure_cost_[0-9]+|pm_transportation_cost_[0-9]+|pm_calc_total_income_[0-9]+|pm_calc_other_income_[0-9]+|pm_location_period_lab_[0-9]+|pm_location_weeks_[0-9]+"),
     names_to = c(".value", "loc_ind"),
     names_pattern = "(.+)_([0-9]+)") |>
   filter(pm_location_period_lab == "From follow up 5 (December 2024) to endline (June 2025)") |>
@@ -762,6 +756,8 @@ temp_loc_costs_df <- pm_el |>
             el_pm_phone_cost = sum(pm_phone_cost, na.rm = T),
             el_pm_leisure_cost = sum(pm_leisure_cost, na.rm = T),
             el_pm_transportation_cost = sum(pm_transportation_cost, na.rm = T),
+            el_pm_calc_total_income = sum(pm_calc_total_income, na.rm = T),
+            el_pm_calc_other_income = sum(pm_calc_other_income, na.rm = T),
             tot_loc_weeks = sum(pm_location_weeks, na.rm = T))
 
 # SG: this dataframe doesn't seem to get used but creates errors
@@ -797,26 +793,18 @@ rm(temp_loc_costs_df)
 
 # Income (CFA) ----
 addIndex("pm_el",
-         c(getVarnames(pm_el, "pm_calc_total_income_"),
-           getVarnames(pm_el, "pm_calc_other_income_")),
+         c("el_pm_calc_total_income",
+           "el_pm_calc_other_income"),
          "el_pm_inc")
 
 pm_el <- pm_el |>
   mutate(el_pm_inc = el_pm_inc/tot_loc_weeks)
 
 # Savings (CFA) ----
-temp_savings_df <- pm_el |>
-  select(hh_id, matches("pm_savings_type_amt_[0-9]+|pm_location_period_lab_[0-9]+")) |>
-  pivot_longer(
-    cols = matches("pm_savings_type_amt_[0-9]+|pm_location_period_lab_[0-9]+"),
-    names_to = c(".value", "loc_ind"),
-    names_pattern = "(.+)_([0-9]+)") |>
-  filter(pm_location_period_lab == "From follow up 5 (December 2024) to endline (June 2025)") |>
-  group_by(hh_id) |>
-  summarize(el_pm_savings = sum(pm_savings_type_amt, na.rm = T))
-
 pm_el <- pm_el |>
-  left_join(temp_savings_df, by = "hh_id") |>
+  rowwise() |>
+  mutate(el_pm_savings = sum(c_across(matches("^pm_savings_type_amt_[0-9]+$")), na.rm = T)) |>
+  ungroup() |>
   mutate(el_pm_savings = ifelse(pm_separate_savings == 0, 0, el_pm_savings),
          el_pm_total_loan_value = -pm_total_loan_value)
 
@@ -867,8 +855,10 @@ temp_loc_share_df <- pm_el |>
     names_to = c(".value", "loc_ind"),
     names_pattern = "(.+)_([0-9]+)") |>
   filter(pm_location_period_lab == "From follow up 5 (December 2024) to endline (June 2025)") |>
-  mutate(pm_share_income_amt = ifelse(pm_share_income == 0, 0, pm_share_income_amt),
-         pm_rec_income_amt = ifelse(pm_rec_income == 0, 0, pm_rec_income_amt),
+  mutate(pm_share_income_amt = case_when(pm_share_income == 0 ~ 0,
+                                          .default = pm_share_income_amt),
+         pm_rec_income_amt = case_when(pm_rec_income == 0 ~ 0,
+                                        .default = pm_rec_income_amt),
          pm_share_income_amt = pm_share_income_amt/pm_location_weeks,
          pm_rec_income_amt = pm_rec_income_amt/pm_location_weeks) |>
   group_by(hh_id) |>
