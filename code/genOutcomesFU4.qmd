@@ -1678,7 +1678,7 @@ livestock_prices_df <- hoh_fu4 |>
     hoh_livestock_name %in% c("None", "Aucun", "Babu") ~ 0,
     TRUE ~ NA_real_  # In case of any unexpected value
   )) |>
-  mutate(price = hoh_livestock_value) |>
+  mutate(price = hoh_livestock_value/hoh_livestock_own) |>
   group_by(livestock_id) |>
   summarize(med_price = median(price, na.rm = T),
             mean_price = mean(price, na.rm = T))
@@ -1706,7 +1706,7 @@ livestock_bought_df <- hoh_fu4 |>
   left_join(livestock_prices_df, by = "livestock_id") |>
   mutate(hoh_livestock_bought_amt = med_price * hoh_livestock_bought) |>
   group_by(hh_id) |>
-  summarize(hoh_livestock_bought_amt = mean(hoh_livestock_bought_amt))
+  summarize(hoh_livestock_bought_amt = sum(hoh_livestock_bought_amt, na.rm = T))
 
 # Num school age members and asset counts
 temp_school_assets_df <- hoh_fu4 |>
