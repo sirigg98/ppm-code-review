@@ -1423,7 +1423,7 @@ temp_monthconscat_df <- hoh_fu4 |>
   filter(hoh_item != "") |>
   select(-item_number) |>
   pivot_wider(names_from = "hoh_item", values_from = "hoh_monthly_consumption_amt") |>
-  mutate_at(vars(matches("fu4_hoh_monthcons")), ~case_when(is.na(.) ~ 0, .default = .))
+  mutate_at(vars(matches("fu4_hh_monthcons")), ~case_when(is.na(.) ~ 0, .default = .))
 
 
 temp_weekconscat_df <- hoh_fu4 |>
