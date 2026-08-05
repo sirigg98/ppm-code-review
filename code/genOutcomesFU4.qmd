@@ -543,18 +543,10 @@ pm_fu4 <- pm_fu4 |>
 
 # Savings (CFA) ----
 
-temp_savings_df <- pm_fu4 |>
-  select(hh_id, matches("pm_savings_type_amt_[0-9]+|pm_location_period_lab_[0-9]+")) |>
-  pivot_longer(
-    cols = matches("pm_savings_type_amt_[0-9]+|pm_location_period_lab_[0-9]+"),
-    names_to = c(".value", "loc_ind"),
-    names_pattern = "(.+)_([0-9]+)") |>
-  filter(pm_location_period_lab == "from our most recent survey in person to now") |>
-  group_by(hh_id) |>
-  summarize(fu4_pm_savings = sum(pm_savings_type_amt, na.rm = T))
-
 pm_fu4 <- pm_fu4 |>
-  left_join(temp_savings_df, by = "hh_id")
+  rowwise() |>
+  mutate(fu4_pm_savings = sum(c_across(matches("^pm_savings_type_amt_[0-9]+$")), na.rm = T)) |>
+  ungroup()
 
 
 addIndex("pm_fu4",

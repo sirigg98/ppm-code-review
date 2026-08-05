@@ -761,22 +761,13 @@ pm_fu5 <- pm_fu5 |>
   mutate(fu5_pm_inc = fu5_pm_inc/tot_loc_weeks)
 
 # Savings (CFA) ----
-temp_savings_df <- pm_fu5 |>
-  select(hh_id, matches("pm_savings_type_amt_[0-9]+|pm_location_period_lab_[0-9]+")) |>
-  pivot_longer(
-    cols = matches("pm_savings_type_amt_[0-9]+|pm_location_period_lab_[0-9]+"),
-    names_to = c(".value", "loc_ind"),
-    names_pattern = "(.+)_([0-9]+)") |>
-  filter(pm_location_period_lab == "From our most recent phone survey (September 2024) to now") |>
-  group_by(hh_id) |>
-  summarize(fu5_pm_savings = sum(pm_savings_type_amt, na.rm = T))
-
 pm_fu5 <- pm_fu5 |>
-  left_join(temp_savings_df, by = "hh_id") |>
+  rowwise() |>
+  mutate(fu5_pm_savings = sum(c_across(matches("^pm_savings_type_amt_[0-9]+$")), na.rm = T)) |>
+  ungroup() |>
   mutate(fu5_pm_savings = ifelse(pm_separate_savings == 0, 0, fu5_pm_savings),
          fu5_pm_total_loan_value = -pm_total_loan_value)
 
-pm_fu5 |> select(pm_separate_savings, fu5_pm_savings, fu5_pm_total_loan_value)
 addIndex("pm_fu5",
          c("fu5_pm_savings",
            "pm_total_loan_value"),
